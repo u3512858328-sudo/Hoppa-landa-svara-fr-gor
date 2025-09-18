@@ -21,6 +21,7 @@ let game = {
   obstacle: null,
   intersection: null,
   signPos: null,
+  crosswalk: null,
   startedAt: null
 };
 
@@ -120,41 +121,99 @@ function getControls() {
 // Nivådata
 // ===========================
 const levels = [
-  { id: 1, title: "Väjningsplikt", intro: "Väj för bilen från höger vid väjningsplikt.",
-    setup: () => { game.player = new Car(200, 300, 0, "#0077cc"); game.npc = new Car(500, 300, Math.PI, "#cc0000"); game.signPos = { x: 300, y: 260, type: "yield" }; },
-    check: () => { if (checkCollision(game.player, game.npc)) return "crash"; if (game.player.x > 600) return "success"; }
+  { id: 1, title: "Väjningsplikt", intro: "Väj för bilen från höger vid korsningen.",
+    setup: () => { 
+      game.player = new Car(200, 340, 0, "#0077cc"); // höger körfält
+      game.npc = new Car(500, 300, Math.PI/2, "#cc0000"); // kommer från höger
+      game.signPos = { x: 180, y: 280, type: "yield" }; 
+      game.intersection = { x: 400, y: 280, w: 100, h: 80 };
+    },
+    check: () => { 
+      if (checkCollision(game.player, game.npc)) return "fail"; 
+      if (game.player.x > 600) return "success"; 
+    }
   },
-  { id: 2, title: "Stoppskylt", intro: "Stanna helt vid stopplinjen innan du kör vidare.",
-    setup: () => { game.player = new Car(100, 300, 0, "#0077cc"); game.signPos = { x: 250, y: 270, type: "stop" }; },
-    check: () => { if (game.player.x > 400) return (game.player.speed > 1) ? "fail" : "success"; }
+  { id: 2, title: "Stoppskylt", intro: "Stanna helt vid korsningen.",
+    setup: () => { 
+      game.player = new Car(200, 340, 0, "#0077cc");
+      game.signPos = { x: 180, y: 280, type: "stop" }; 
+      game.intersection = { x: 400, y: 280, w: 100, h: 80 };
+    },
+    check: () => { 
+      if (game.player.x > 400) return (game.player.speed > 1) ? "fail" : "success"; 
+    }
   },
-  { id: 3, title: "Hastighetsgräns", intro: "Håll max 50 km/h.",
-    setup: () => { game.player = new Car(100, 300, 0, "#0077cc"); game.signPos = { x: 200, y: 260, type: "speed50" }; },
-    check: () => { if (game.player.x > 600) return (game.player.speed > 14) ? "fail" : "success"; }
+  { id: 3, title: "Hastighetsgräns", intro: "Håll max 50 km/h på raksträckan.",
+    setup: () => { 
+      game.player = new Car(200, 340, 0, "#0077cc"); 
+      game.signPos = { x: 180, y: 280, type: "speed50" }; 
+    },
+    check: () => { 
+      if (game.player.x > 600) return (game.player.speed > 14) ? "fail" : "success"; 
+    }
   },
   { id: 4, title: "Högerregeln", intro: "Lämna företräde åt bilen från höger.",
-    setup: () => { game.player = new Car(400, 500, -Math.PI/2, "#0077cc"); game.npc = new Car(500, 400, Math.PI, "#cc0000"); game.intersection = { x: 450, y: 450 }; },
-    check: () => { if (checkCollision(game.player, game.npc)) return "crash"; if (game.player.y < 200) return "success"; }
+    setup: () => { 
+      game.player = new Car(350, 500, -Math.PI/2, "#0077cc"); // kör uppåt
+      game.npc = new Car(450, 280, Math.PI/2, "#cc0000"); // från höger
+      game.intersection = { x: 350, y: 280, w: 100, h: 100 }; 
+    },
+    check: () => { 
+      if (checkCollision(game.player, game.npc)) return "fail"; 
+      if (game.player.y < 100) return "success"; 
+    }
   },
-  { id: 5, title: "Cyklist på övergångsställe", intro: "Stanna för cyklisten.",
-    setup: () => { game.player = new Car(100, 300, 0, "#0077cc"); game.npc = new Car(300, 300, 0, "green"); },
-    check: () => { if (checkCollision(game.player, game.npc)) return "crash"; if (game.player.x > 500) return "success"; }
+  { id: 5, title: "Cyklist vid övergångsställe", intro: "Stanna för cyklisten.",
+    setup: () => { 
+      game.player = new Car(200, 340, 0, "#0077cc"); 
+      game.npc = new Car(400, 320, 0, "green"); 
+      game.crosswalk = { x: 380, y: 280, w: 80, h: 80 };
+    },
+    check: () => { 
+      if (checkCollision(game.player, game.npc)) return "fail"; 
+      if (game.player.x > 600) return "success"; 
+    }
   },
-  { id: 6, title: "Trafikljus", intro: "Stanna vid rött, kör vid grönt.",
-    setup: () => { game.player = new Car(100, 300, 0, "#0077cc"); game.signPos = { x: 250, y: 260, type: "lightRed" }; },
-    check: () => { if (game.player.x > 400) return (game.signPos.type === "lightRed") ? "fail" : "success"; }
+  { id: 6, title: "Trafikljus", intro: "Stanna vid rött ljus.",
+    setup: () => { 
+      game.player = new Car(200, 340, 0, "#0077cc"); 
+      game.signPos = { x: 380, y: 280, type: "lightRed" }; 
+      game.intersection = { x: 400, y: 280, w: 100, h: 80 };
+    },
+    check: () => { 
+      if (game.player.x > 400) return (game.signPos.type === "lightRed") ? "fail" : "success"; 
+    }
   },
   { id: 7, title: "Rondell", intro: "Lämna företräde i rondellen.",
-    setup: () => { game.player = new Car(200, 500, -Math.PI/2, "#0077cc"); game.npc = new Car(300, 300, Math.PI/2, "#cc0000"); },
-    check: () => { if (checkCollision(game.player, game.npc)) return "crash"; if (game.player.y < 200) return "success"; }
+    setup: () => { 
+      game.player = new Car(350, 500, -Math.PI/2, "#0077cc"); 
+      game.npc = new Car(350, 280, Math.PI/2, "#cc0000"); 
+      game.intersection = { x: 300, y: 230, w: 200, h: 200, roundabout: true };
+    },
+    check: () => { 
+      if (checkCollision(game.player, game.npc)) return "fail"; 
+      if (game.player.y < 100) return "success"; 
+    }
   },
   { id: 8, title: "Övergångsställe", intro: "Stanna för gående.",
-    setup: () => { game.player = new Car(100, 300, 0, "#0077cc"); game.npc = new Car(300, 300, 0, "orange"); },
-    check: () => { if (checkCollision(game.player, game.npc)) return "crash"; if (game.player.x > 500) return "success"; }
+    setup: () => { 
+      game.player = new Car(200, 340, 0, "#0077cc"); 
+      game.npc = new Car(400, 320, 0, "orange"); 
+      game.crosswalk = { x: 380, y: 280, w: 80, h: 80 };
+    },
+    check: () => { 
+      if (checkCollision(game.player, game.npc)) return "fail"; 
+      if (game.player.x > 600) return "success"; 
+    }
   },
-  { id: 9, title: "Parkering", intro: "Parkera i rutan.",
-    setup: () => { game.player = new Car(100, 500, 0, "#0077cc"); game.signPos = { x: 600, y: 300, type: "park" }; },
-    check: () => { if (Math.abs(game.player.x - 600) < 20 && Math.abs(game.player.y - 300) < 20) return "success"; }
+  { id: 9, title: "Parkering", intro: "Parkera i rutan till höger.",
+    setup: () => { 
+      game.player = new Car(200, 340, 0, "#0077cc"); 
+      game.signPos = { x: 600, y: 280, type: "park" }; 
+    },
+    check: () => { 
+      if (Math.abs(game.player.x - 600) < 20 && Math.abs(game.player.y - 320) < 20) return "success"; 
+    }
   }
 ];
 
@@ -166,6 +225,7 @@ function startLevel(lvl) {
   game.signPos = null;
   game.npc = null;
   game.intersection = null;
+  game.crosswalk = null;
   levels[lvl-1].setup();
   game.playing = true;
 }
@@ -173,10 +233,12 @@ function startLevel(lvl) {
 function update(dt) {
   const controls = getControls();
   game.player.update(dt, controls);
-  if (game.npc) game.npc.update(dt, { throttle: 0.4, steer: 0 });
+
+  // NPC kör sin bana (inte på dig med flit)
+  if (game.npc) game.npc.update(dt, { throttle: 0.2, steer: 0 });
 
   const status = levels[game.level-1].check();
-  if (status === "crash" || status === "fail") {
+  if (status === "fail") {
     game.lives--;
     if (game.lives <= 0) gameOver();
     else startLevel(game.level);
@@ -189,12 +251,59 @@ function update(dt) {
 
 function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Vägyta
   ctx.fillStyle = "#666";
   ctx.fillRect(0, 280, canvas.width, 80);
+
+  // Körfältsmarkeringar
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([20, 20]);
+  ctx.beginPath();
+  ctx.moveTo(0, 300);
+  ctx.lineTo(canvas.width, 300);
+  ctx.moveTo(0, 340);
+  ctx.lineTo(canvas.width, 340);
+  ctx.stroke();
+
+  // Mittlinje
+  ctx.strokeStyle = "yellow";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([30, 20]);
+  ctx.beginPath();
+  ctx.moveTo(0, 320);
+  ctx.lineTo(canvas.width, 320);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+
+  // Korsning
+  if (game.intersection) {
+    if (game.intersection.roundabout) {
+      ctx.fillStyle = "#555";
+      ctx.beginPath();
+      ctx.arc(game.intersection.x+game.intersection.w/2, game.intersection.y+game.intersection.h/2, 80, 0, Math.PI*2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "#555";
+      ctx.fillRect(game.intersection.x, game.intersection.y, game.intersection.w, game.intersection.h);
+    }
+  }
+
+  // Övergångsställe
+  if (game.crosswalk) {
+    ctx.fillStyle = "white";
+    for (let i=0; i<5; i++) {
+      ctx.fillRect(game.crosswalk.x + i*16, game.crosswalk.y, 8, game.crosswalk.h);
+    }
+  }
+
+  // Skyltar, bilar
   if (game.signPos) drawSign(game.signPos);
-  if (game.intersection) { ctx.fillStyle = "#444"; ctx.fillRect(400, 400, 100, 100); }
   if (game.npc) game.npc.draw(ctx);
   game.player.draw(ctx);
+
   hud.innerHTML = `<div><b>Nivå:</b> ${game.level} – ${levels[game.level-1].title}</div>
     <div><b>Liv:</b> ${game.lives}</div><div><b>Poäng:</b> ${game.score}</div>`;
 }
