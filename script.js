@@ -248,46 +248,86 @@ function update(dt) {
     else gameOver(true);
   }
 }
+function drawScene() {
+  ctx.fillStyle = "#77a377"; // grön bakgrund (gräs)
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-function draw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // Huvudväg
+  ctx.fillStyle = "#555";
+  ctx.fillRect(0, 260, canvas.width, 120);
 
-  // Vägyta
-  ctx.fillStyle = "#666";
-  ctx.fillRect(0, 280, canvas.width, 80);
-
-  // Körfältsmarkeringar
-  ctx.strokeStyle = "white";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([20, 20]);
-  ctx.beginPath();
-  ctx.moveTo(0, 300);
-  ctx.lineTo(canvas.width, 300);
-  ctx.moveTo(0, 340);
-  ctx.lineTo(canvas.width, 340);
-  ctx.stroke();
-
-  // Mittlinje
+  // Mittlinje (gul, streckad)
   ctx.strokeStyle = "yellow";
   ctx.lineWidth = 3;
-  ctx.setLineDash([30, 20]);
+  ctx.setLineDash([20, 20]);
   ctx.beginPath();
   ctx.moveTo(0, 320);
   ctx.lineTo(canvas.width, 320);
   ctx.stroke();
-
   ctx.setLineDash([]);
 
-  // Korsning
+  // Eventuella korsningar
   if (game.intersection) {
-    if (game.intersection.roundabout) {
-      ctx.fillStyle = "#555";
-      ctx.beginPath();
-      ctx.arc(game.intersection.x+game.intersection.w/2, game.intersection.y+game.intersection.h/2, 80, 0, Math.PI*2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = "#555";
-      ctx.fillRect(game.intersection.x, game.intersection.y, game.intersection.w, game.intersection.h);
+    ctx.fillStyle = "#555";
+    ctx.fillRect(game.intersection.x, game.intersection.y, game.intersection.w, game.intersection.h);
+  }
+
+  // Stopplinje
+  if (game.stopLine) {
+    ctx.fillStyle = "white";
+    ctx.fillRect(game.stopLine.x, game.stopLine.y, game.stopLine.w, game.stopLine.h);
+  }
+
+  // Övergångsställe
+  if (game.crosswalk) {
+    ctx.fillStyle = "white";
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(game.crosswalk.x + i * 10, game.crosswalk.y, 5, game.crosswalk.h);
+    }
+  }
+
+  // Rondell
+  if (game.roundabout) {
+    ctx.fillStyle = "#777";
+    ctx.beginPath();
+    ctx.arc(game.roundabout.x, game.roundabout.y, game.roundabout.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#77a377";
+    ctx.beginPath();
+    ctx.arc(game.roundabout.x, game.roundabout.y, game.roundabout.r - 25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Trafikljus
+  if (game.trafficLight) {
+    ctx.fillStyle = game.trafficLight.state === "red" ? "red" : "green";
+    ctx.fillRect(game.trafficLight.x, game.trafficLight.y, 20, 50);
+  }
+
+  // Vägmärken
+  if (game.signPos) {
+    drawSign(game.signPos);
+  }
+
+  // Gående
+  if (game.pedestrian) {
+    ctx.fillStyle = "#ffcc00";
+    ctx.fillRect(game.pedestrian.x, game.pedestrian.y, 15, 30);
+  }
+
+  // Spelarens bil
+  if (game.player) game.player.draw();
+
+  // Andra fordon
+  if (game.npc) game.npc.draw();
+  if (game.cyclist) game.cyclist.draw();
+
+  // Textinfo
+  ctx.fillStyle = "black";
+  ctx.font = "16px Arial";
+  ctx.fillText(`Nivå: ${game.level.id} – ${game.level.title}`, 20, 20);
+}
+
     }
   }
 
