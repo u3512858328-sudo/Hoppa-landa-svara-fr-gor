@@ -1,98 +1,48 @@
-:root {
-  --bg: #e9eef2;
-  --road: #333;
-  --ui: #0b72a6;
-  --danger: #cc0000;
-}
-
-html, body {
+body {
+  font-family: Arial, sans-serif;
+  background: #e0e0e0;
   margin: 0;
-  padding: 0;
-  height: 100%;
-  font-family: Inter, system-ui, Segoe UI, Roboto, sans-serif;
-  background: var(--bg);
-  color: #222;
-}
-
-.wrap {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
-header {
-  background: var(--ui);
-  color: white;
-  padding: 12px 18px;
-}
-
-header h1 {
-  margin: 0;
-  font-size: 22px;
-}
-
-.small {
-  font-size: 13px;
-  opacity: 0.9;
-}
-
-footer {
   text-align: center;
-  font-size: 13px;
-  color: #555;
-  padding: 10px;
-  background: #fff;
-  border-top: 1px solid #ddd;
 }
 
-.btn {
-  display: inline-block;
-  padding: 10px 16px;
-  border-radius: 6px;
-  background: var(--ui);
-  color: white;
-  border: none;
-  cursor: pointer;
-  font-size: 15px;
+#menu, #gameOver {
+  margin-top: 100px;
 }
-.btn:hover {
-  background: #095a82;
+
+#menu button, #gameOver button {
+  padding: 10px 20px;
+  font-size: 18px;
+  border-radius: 8px;
+  border: none;
+  background: #0077cc;
+  color: white;
+  cursor: pointer;
+}
+#menu button:hover, #gameOver button:hover {
+  background: #005fa3;
 }
 
 .hidden {
   display: none;
 }
 
-#menu, #gameOver {
-  flex: 1;
+#gameArea {
+  margin: 20px auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-#gameArea {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
 }
 
 #canvas {
-  background: linear-gradient(#b7d0df, #e6f0f6);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .15);
+  border: 2px solid #333;
+  background: #88aa88;
+  box-shadow: 0 0 10px rgba(0,0,0,0.5);
 }
 
-.hud {
-  position: absolute;
-  top: 80px;
-  left: 20px;
-  background: rgba(255,255,255,0.9);
-  padding: 8px 12px;
+#hud {
+  margin-top: 10px;
+  font-size: 18px;
+  background: rgba(255,255,255,0.8);
+  padding: 6px 12px;
   border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0,0,0,.08);
-  font-size: 14px;
 }
