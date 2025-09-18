@@ -1,14 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="sv">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Svenska Trafikspelet</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Svenska Trafikspelet</h1>
-  <button id="startBtn">Starta spel</button>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <header>
+    <h1>Svenska Trafikspelet</h1>
+    <p class="hint">Styr med piltangenter: ↑ gas • ↓ broms • ← → sidostyrning</p>
+  </header>
+
+  <main>
+    <div id="menu" class="screen">
+      <h2>Start</h2>
+      <p>Träna svenska trafikregler. Nivå 1 är borttagen — spelet börjar på nivå 2.</p>
+      <button id="startBtn" class="btn">Starta spel</button>
+      <div class="small">Klarar du alla nivåer?</div>
+    </div>
+
+    <div id="game" class="hidden">
+      <canvas id="gameCanvas" width="800" height="680"></canvas>
+      <div id="hud"></div>
+    </div>
+
+    <div id="gameOver" class="screen hidden">
+      <h2>Spelet slut</h2>
+      <p id="finalText"></p>
+      <button id="restartBtn" class="btn">Spela igen</button>
+    </div>
+  </main>
+
+  <footer>
+    <small>Byggt för att öva trafikregler — högertrafik antagen.</small>
+  </footer>
 
   <script src="script.js"></script>
 </body>
