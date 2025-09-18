@@ -1,46 +1,28 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="sv">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Svenskt Trafikspel</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <title>Svenska Trafikspelet</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Svenskt Trafikspel</h1>
-      <div class="small">Träna trafikregler i ett spel — högertrafik, skyltar och väjningsregler.</div>
-    </header>
+  <div id="menu">
+    <h1>🚗 Svenska Trafikspelet</h1>
+    <p>Lär dig svenska trafikregler genom att spela!</p>
+    <button id="startGame">Starta spelet</button>
+  </div>
 
-    <!-- Startmeny -->
-    <div id="menu">
-      <h2>Välkommen!</h2>
-      <p>Använd <strong>piltangenter</strong> för att styra bilen.</p>
-      <p>Klarar du alla nivåer utan att förlora dina 3 liv?</p>
-      <button id="startGame" class="btn">Starta spelet</button>
-    </div>
+  <div id="gameArea" class="hidden">
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="hud"></div>
+  </div>
 
-    <!-- Spelvy -->
-    <div id="gameArea" class="hidden">
-      <canvas id="canvas" width="900" height="600"></canvas>
-      <div class="hud" id="hud"></div>
-    </div>
-
-    <!-- Game Over -->
-    <div id="gameOver" class="hidden">
-      <h2>Game Over</h2>
-      <p id="finalScore"></p>
-      <button id="restartGame" class="btn">Spela igen</button>
-    </div>
-
-    <footer>
-      <p>© 2025 Svenskt Trafikspel – ett öppet källkodsprojekt. 
-      <a href="https://github.com/" target="_blank">GitHub</a></p>
-    </footer>
+  <div id="gameOver" class="hidden">
+    <h2>Spelet över</h2>
+    <p id="finalScore"></p>
+    <button id="restartGame">Spela igen</button>
   </div>
 
   <script src="script.js"></script>
 </body>
 </html>
-
