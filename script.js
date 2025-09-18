@@ -1,11 +1,9 @@
-/* script.js
-   Vertikal väg (uppåt), kontroller, och nivåer (2..9)
-   - Startknapp: #startBtn
-   - Canvas: #gameCanvas
-*/
+// script.js - komplett ny version
+// Förutsätter: index.html har <canvas id="gameCanvas">, en knapp #startBtn och #restartBtn, #menu, #game, #hud, #gameOver etc.
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
 const startBtn = document.getElementById('startBtn');
 const restartBtn = document.getElementById('restartBtn');
 const menu = document.getElementById('menu');
@@ -18,10 +16,10 @@ let keys = {};
 window.addEventListener('keydown', e => keys[e.key] = true);
 window.addEventListener('keyup', e => keys[e.key] = false);
 
-// Game state
-let state = {
+// -- Game state
+const S = {
   running: false,
-  levelIndex: 0,      // starts at 0 => corresponds to levels[0] which is id 2
+  levelIndex: 0,
   lives: 3,
   score: 0,
   player: null,
@@ -34,28 +32,32 @@ let state = {
   crosswalk: null,
   roundabout: null,
   sign: null,
-  introShown: false
+  // input timers
+  brakeHoldStart: null,
+  isReversing: false,
+  introShown: false,
+  stopHoldStart: null
 };
 
-// Basic car class (player + others)
+// -- Car class (player and others)
 class Car {
   constructor(x, y, color='blue', w=36, h=18) {
-    this.x = x; // center x
-    this.y = y; // center y
+    this.x = x; this.y = y;
     this.color = color;
-    this.w = w;
-    this.h = h;
-    this.speed = 0; // pixels per frame
-    this.maxSpeed = 4.2; // tunable
+    this.w = w; this.h = h;
+    this.speed = 0;            // px per frame forward (positive => up)
+    this.maxSpeed = 4.2;      // tunable
+    this.maxReverse = 2.2;
     this.acc = 0.12;
+    this.brakePower = 0.24;
     this.friction = 0.96;
-    this.angle = 0; // for drawing orientation
+    this.angle = 0;
   }
   update() {
-    // Apply friction
+    // apply friction
     this.speed *= this.friction;
     if (Math.abs(this.speed) < 0.01) this.speed = 0;
-    // Move vertically upwards (y decreases)
+    // move (upwards when positive)
     this.y -= this.speed;
   }
   draw() {
@@ -64,8 +66,7 @@ class Car {
     ctx.rotate(this.angle);
     ctx.fillStyle = this.color;
     ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
-    // windows
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.fillRect(-this.w/2 + 6, -this.h/4, this.w/3, this.h/2);
     ctx.restore();
   }
@@ -74,220 +75,208 @@ class Car {
   }
 }
 
-// Collision simple AABB
-function collides(a, b) {
+// simple rect collision
+function rectsCollide(a, b) {
   if (!a || !b) return false;
   return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
 }
 
-// --- Levels (2..9). All use vertical road (player moves up = y decreases).
+// Helper: is player overlapping stopLine
+function playerOverStopLine() {
+  if (!S.stopLine || !S.player) return false;
+  const p = S.player.bbox();
+  const s = S.stopLine;
+  return !(p.x + p.w < s.x || p.x > s.x + s.w || p.y + p.h < s.y || p.y > s.y + s.h);
+}
+
+// -- Levels 2..9 (levelIndex 0 => level id 2)
 const levels = [
-  // LEVEL 2: Stopplikt vid korsning
+  // LEVEL 2 - Stopplikt (T- eller fyrvägskorsning): stopplinje innan korsning
   {
     id: 2, title: "Stopplikt",
-    intro: "Stanna vid stopplinjen innan du kör in i korsningen.",
+    intro: "Stanna vid stopplinjen i korsningen. Stanna helt i minst 2 sekunder innan du kör in.",
     setup: () => {
-      // road center x = 400; lanes: right-lane x ~380
-      state.player = new Car(380, 610, 'blue');
-      state.stopLine = { x: 360, y: 360, w: 40, h: 6 }; // horizontal stop line across lane
-      state.intersection = { x: 300, y: 300, w: 200, h: 120 }; // cross road is horizontal
-      state.sign = { x: 320, y: 420, type: 'stop' }; // sign before stopline
-      // require stop: player must reduce speed to near 0 while overlapping stopLine for at least 1s
-      state._stopHoldStart = null;
+      S.player = new Car(400, 640, 'blue');
+      // intersection is a horizontal road crossing the vertical main road
+      S.intersection = { x: 240, y: 360, w: 320, h: 120 };
+      // stopline is drawn across the right lane
+      S.stopLine = { x: 360, y: 420, w: 80, h: 6 }; // horizontal bar (we will draw it as across the lane)
+      S.sign = { x: 440, y: 440, type: 'stop' }; // stand at road edge
+      S._stopHoldStart = null;
+      // nothing else moves
     },
     update: () => {
-      // nothing else moves
-      // manage stopHold timer
-      if (state.player && Math.abs(state.player.speed) < 0.2) {
-        // is player overlapping stopLine?
-        if (playerOverStopLine()) {
-          if (!state._stopHoldStart) state._stopHoldStart = performance.now();
-        } else {
-          state._stopHoldStart = null;
-        }
+      // track stop hold if player stationary and overlapping stopline
+      if (Math.abs(S.player.speed) < 0.2 && playerOverStopLine()) {
+        if (!S._stopHoldStart) S._stopHoldStart = performance.now();
       } else {
-        state._stopHoldStart = null;
+        S._stopHoldStart = null;
       }
     },
     check: () => {
-      // if player crosses into intersection with speed > small threshold -> fail
-      if (state.player.y < state.intersection.y + state.intersection.h/2) {
-        // entered intersection
-        if (!(state._stopHoldStart && (performance.now() - state._stopHoldStart) >= 900)) {
-          return 'fail';
-        } else {
-          return 'success';
-        }
+      // if player enters intersection (y less than intersection center) ensure stopHold was >= 1800ms
+      if (S.player.y < S.intersection.y + S.intersection.h / 2) {
+        if (!(S._stopHoldStart && (performance.now() - S._stopHoldStart) >= 1800)) return 'fail';
+        return 'success';
       }
       return null;
     }
   },
 
-  // LEVEL 3: Hastighetsbegränsning (t.ex. 30 km/h ~ threshold)
+  // LEVEL 3 - Hastighetsbegränsning
   {
     id: 3, title: "Hastighetsbegränsning",
-    intro: "Håll hastigheten under 30 km/h (ungefär 4 px/frame).",
+    intro: "Håll hastigheten under gränsen (provvis 4.5 px/frame).",
     setup: () => {
-      state.player = new Car(380, 610, 'blue');
-      state.sign = { x: 320, y: 420, type: 'speed30' };
-      state.speedLimit = 4.5; // px/frame threshold (tweak)
+      S.player = new Car(400, 640, 'blue');
+      S.sign = { x: 440, y: 420, type: 'speed30' };
+      S.speedLimit = 4.5;
     },
     update: () => {},
     check: () => {
-      if (state.player.speed > state.speedLimit) return 'fail';
-      if (state.player.y < 100) return 'success';
+      if (S.player.speed > S.speedLimit) return 'fail';
+      if (S.player.y < 80) return 'success';
       return null;
     }
   },
 
-  // LEVEL 4: Övergångsställe (gående)
+  // LEVEL 4 - Övergångsställe
   {
     id: 4, title: "Övergångsställe",
-    intro: "Stanna för gående som korsar på övergångsstället.",
+    intro: "Stanna för gående som korsar vid övergångsstället.",
     setup: () => {
-      state.player = new Car(380, 610, 'blue');
-      state.crosswalk = { x: 360, y: 360, w: 40, h: 8 };
-      state.pedestrian = { x: 360, y: 340, w: 14, h: 28, walking: true, speed: 0.6 };
-      state._pedWalkStarted = false;
+      S.player = new Car(400, 640, 'blue');
+      S.crosswalk = { x: 360, y: 420, w: 80, h: 8 };
+      S.pedestrian = { x: 320, y: 420, w: 14, h: 28, speed: 0.6, started: true }; // walks left->right across crosswalk
     },
     update: () => {
-      // pedestrian crosses horizontally (left-to-right)
-      if (state.pedestrian && state.pedestrian.walking) {
-        state.pedestrian.x += state.pedestrian.speed;
-      }
+      if (S.pedestrian && S.pedestrian.started) S.pedestrian.x += S.pedestrian.speed;
     },
     check: () => {
-      // if pedestrian collides with player -> fail
-      if (rectCollidePlayer(state.pedestrian)) return 'fail';
-      if (state.player.y < 100) return 'success';
+      if (S.pedestrian && rectsCollide(S.pedestrian, S.player.bbox())) return 'fail';
+      if (S.player.y < 80) return 'success';
       return null;
     }
   },
 
-  // LEVEL 5: Cyklist i korsning
+  // LEVEL 5 - Cyklist i korsning
   {
     id: 5, title: "Cyklist",
-    intro: "Lämna företräde åt cyklisten i korsningen.",
+    intro: "Lämna företräde åt cyklisten i korsningen (den kommer från höger).",
     setup: () => {
-      state.player = new Car(380, 610, 'blue');
-      state.intersection = { x: 300, y: 300, w: 200, h: 120 };
-      state.cyclist = new Car(460, 320, 'green', 22, 12); // cyclist coming from right to left
-      state.cyclist.speed = 1.6;
+      S.player = new Car(400, 640, 'blue');
+      S.intersection = { x: 240, y: 360, w: 320, h: 120 };
+      S.cyclist = new Car(540, 360, 'green', 22, 12); // coming from right, moving left across intersection
+      S.cyclist.speed = 1.6;
     },
     update: () => {
-      if (state.cyclist) state.cyclist.x -= state.cyclist.speed;
+      if (S.cyclist) S.cyclist.x -= S.cyclist.speed;
     },
     check: () => {
-      if (rectCollidePlayer(state.cyclist)) return 'fail';
-      if (state.player.y < 100) return 'success';
+      if (S.cyclist && rectsCollide(S.cyclist.bbox(), S.player.bbox())) return 'fail';
+      if (S.player.y < 80) return 'success';
       return null;
     }
   },
 
-  // LEVEL 6: Högerregeln
+  // LEVEL 6 - Högerregeln
   {
     id: 6, title: "Högerregeln",
-    intro: "Lämna företräde åt fordon som kommer från höger i korsningen.",
+    intro: "Lämna företräde åt fordon som kommer från höger.",
     setup: () => {
-      state.player = new Car(380, 610, 'blue');
-      state.intersection = { x: 300, y: 300, w: 200, h: 120 };
-      state.npc = new Car(460, 320, 'red'); // comes from right to left - has priority
-      state.npc.speed = 1.8;
+      S.player = new Car(400, 640, 'blue');
+      S.intersection = { x: 240, y: 360, w: 320, h: 120 };
+      S.npc = new Car(540, 360, 'red'); S.npc.speed = 1.9; // from right to left - has priority
     },
     update: () => {
-      if (state.npc) state.npc.x -= state.npc.speed;
+      if (S.npc) S.npc.x -= S.npc.speed;
     },
     check: () => {
-      if (rectCollidePlayer(state.npc)) return 'fail';
-      if (state.player.y < 100) return 'success';
+      if (S.npc && rectsCollide(S.npc.bbox(), S.player.bbox())) return 'fail';
+      if (S.player.y < 80) return 'success';
       return null;
     }
   },
 
-  // LEVEL 7: Trafikljus
+  // LEVEL 7 - Trafikljus
   {
     id: 7, title: "Trafikljus",
-    intro: "Stanna på rött. Kör på grönt.",
+    intro: "Stanna vid rött, kör på grönt.",
     setup: () => {
-      state.player = new Car(380, 610, 'blue');
-      state.trafficLight = { x: 380, y: 360, state: 'red', timer: 0 };
+      S.player = new Car(400, 640, 'blue');
+      // traffic light sits at intersection entry
+      S.trafficLight = { x: 400, y: 420, state: 'red', timer: 0 };
+      S.lightCycle = { redDuration: 220, greenDuration: 220 }; // frames (~3.6s at 60fps)
     },
     update: () => {
-      if (state.trafficLight) {
-        state.trafficLight.timer++;
-        if (state.trafficLight.timer > 240) { // ~4 seconds at 60fps
-          state.trafficLight.state = state.trafficLight.state === 'red' ? 'green' : 'red';
-          state.trafficLight.timer = 0;
-        }
-      }
+      if (!S.trafficLight) return;
+      S.trafficLight.timer++;
+      const period = S.lightCycle.redDuration + S.lightCycle.greenDuration;
+      const t = S.trafficLight.timer % period;
+      S.trafficLight.state = (t < S.lightCycle.redDuration) ? 'red' : 'green';
     },
     check: () => {
-      // if player goes past the light while red -> fail
-      if (state.trafficLight && state.trafficLight.state === 'red' && state.player.y < state.trafficLight.y + 10) return 'fail';
-      if (state.player.y < 100) return 'success';
+      // if player crosses y < light.y while red => fail
+      if (S.trafficLight && S.trafficLight.state === 'red' && S.player.y < S.trafficLight.y + 6) return 'fail';
+      if (S.player.y < 80) return 'success';
       return null;
     }
   },
 
-  // LEVEL 8: Rondell
+  // LEVEL 8 - Rondell
   {
     id: 8, title: "Rondell",
     intro: "Lämna företräde åt fordon som redan är i rondellen.",
     setup: () => {
-      state.player = new Car(380, 610, 'blue');
-      state.roundabout = { x: 380, y: 340, r: 70 };
-      // npc will circle around
-      state.npc = { angle: -Math.PI/2, speed: 0.02, color: 'red' };
+      S.player = new Car(400, 640, 'blue');
+      S.roundabout = { x: 400, y: 360, r: 70 };
+      S.npc = { angle: -Math.PI/2, speed: 0.02, color: 'red', x: null, y: null }; // will circle
     },
     update: () => {
-      if (state.npc) {
-        state.npc.angle += state.npc.speed;
-        state.npc.x = state.roundabout.x + Math.cos(state.npc.angle) * state.roundabout.r;
-        state.npc.y = state.roundabout.y + Math.sin(state.npc.angle) * state.roundabout.r;
+      if (S.npc) {
+        S.npc.angle += S.npc.speed;
+        S.npc.x = S.roundabout.x + Math.cos(S.npc.angle) * S.roundabout.r;
+        S.npc.y = S.roundabout.y + Math.sin(S.npc.angle) * S.roundabout.r;
       }
     },
     check: () => {
-      let npcRect = state.npc ? { x: state.npc.x-16, y: state.npc.y-8, w:32, h:16 } : null;
-      if (npcRect && rectCollidePlayer(npcRect)) return 'fail';
-      if (state.player.y < 120) return 'success';
+      const npcRect = S.npc ? { x: S.npc.x - 16, y: S.npc.y - 8, w: 32, h: 16 } : null;
+      if (npcRect && rectsCollide(npcRect, S.player.bbox())) return 'fail';
+      if (S.player.y < 120) return 'success';
       return null;
     }
   },
 
-  // LEVEL 9: Slutprov (kombination)
+  // LEVEL 9 - Slutprov (kombination)
   {
     id: 9, title: "Slutprov",
-    intro: "Kombination: stopplinje, gående, trafikljus och korsning.",
+    intro: "Kombination: stopplinje, gående och trafikljus i korsning.",
     setup: () => {
-      state.player = new Car(380, 610, 'blue');
-      state.stopLine = { x: 360, y: 430, w: 40, h: 6 };
-      state.intersection = { x: 300, y: 320, w: 200, h: 120 };
-      state.pedestrian = { x: 320, y: 300, w:14, h:28, speed:0.6 };
-      state.trafficLight = { x: 380, y: 360, state: 'red', timer:0 };
-      state._stopHoldStart = null;
+      S.player = new Car(400, 640, 'blue');
+      S.stopLine = { x: 360, y: 480, w: 80, h: 6 };
+      S.intersection = { x: 240, y: 340, w: 320, h: 120 };
+      S.pedestrian = { x: 320, y: 340, w: 14, h: 28, speed: 0.6 };
+      S.trafficLight = { x: 400, y: 420, state: 'red', timer: 0 };
+      S.lightCycle = { redDuration: 200, greenDuration: 200 };
+      S._stopHoldStart = null;
     },
     update: () => {
-      // traffic light
-      if (state.trafficLight) {
-        state.trafficLight.timer++;
-        if (state.trafficLight.timer > 200) {
-          state.trafficLight.state = state.trafficLight.state === 'red' ? 'green' : 'red';
-          state.trafficLight.timer = 0;
-        }
+      if (S.pedestrian) S.pedestrian.x += S.pedestrian.speed;
+      if (S.trafficLight) {
+        S.trafficLight.timer++;
+        const period = S.lightCycle.redDuration + S.lightCycle.greenDuration;
+        const t = S.trafficLight.timer % period;
+        S.trafficLight.state = (t < S.lightCycle.redDuration) ? 'red' : 'green';
       }
-      // pedestrian
-      if (state.pedestrian) state.pedestrian.x += state.pedestrian.speed;
-      // stop hold
-      if (state.player && Math.abs(state.player.speed) < 0.2 && playerOverStopLine()) {
-        if (!state._stopHoldStart) state._stopHoldStart = performance.now();
-      } else state._stopHoldStart = null;
+      if (Math.abs(S.player.speed) < 0.25 && playerOverStopLine()) {
+        if (!S._stopHoldStart) S._stopHoldStart = performance.now();
+      } else S._stopHoldStart = null;
     },
     check: () => {
-      if (rectCollidePlayer(state.pedestrian)) return 'fail';
-      if (state.trafficLight && state.trafficLight.state === 'red' && state.player.y < state.trafficLight.y + 10) return 'fail';
-      // entering intersection requires previous stop hold
-      if (state.player.y < state.intersection.y + state.intersection.h/2) {
-        if (!(state._stopHoldStart && (performance.now() - state._stopHoldStart) >= 900)) return 'fail';
+      if (S.pedestrian && rectsCollide(S.pedestrian, S.player.bbox())) return 'fail';
+      if (S.trafficLight && S.trafficLight.state === 'red' && S.player.y < S.trafficLight.y + 6) return 'fail';
+      if (S.player.y < S.intersection.y + S.intersection.h / 2) {
+        if (!(S._stopHoldStart && (performance.now() - S._stopHoldStart) >= 1800)) return 'fail';
         return 'success';
       }
       return null;
@@ -295,237 +284,261 @@ const levels = [
   }
 ];
 
-// Utility: is player overlapping stop line (simple check)
-function playerOverStopLine() {
-  if (!state.stopLine || !state.player) return false;
-  let p = state.player, s = state.stopLine;
-  let bbox = p.bbox ? p.bbox() : { x: p.x - p.w/2, y: p.y - p.h/2, w: p.w, h: p.h };
-  return !(bbox.x + bbox.w < s.x || bbox.x > s.x + s.w || bbox.y + bbox.h < s.y || bbox.y > s.y + s.h);
-}
-function rectCollidePlayer(rectLike) {
-  if (!rectLike || !state.player) return false;
-  let pbox = { x: state.player.x - state.player.w/2, y: state.player.y - state.player.h/2, w: state.player.w, h: state.player.h };
-  return !(pbox.x + pbox.w < rectLike.x || pbox.x > rectLike.x + rectLike.w || pbox.y + pbox.h < rectLike.y || pbox.y > rectLike.y + rectLike.h);
-}
+// -- Input behavior: gas, brake, back
+const REVERSE_HOLD_MS = 700; // hold down arrow down this long to engage reverse
 
-// Controls
-function handleInput() {
-  if (!state.player) return;
-  // Gas / broms
+function handleInputPerFrame() {
+  if (!S.player) return;
+  // gas:
   if (keys['ArrowUp']) {
-    state.player.speed += state.player.acc;
-    if (state.player.speed > state.player.maxSpeed) state.player.speed = state.player.maxSpeed;
+    S.player.speed += S.player.acc;
+    if (S.player.speed > S.player.maxSpeed) S.player.speed = S.player.maxSpeed;
   }
+  // brake / reverse:
   if (keys['ArrowDown']) {
-    state.player.speed -= state.player.acc * 1.5;
-    if (state.player.speed < 0) state.player.speed = 0;
+    if (!S.brakeHoldStart) S.brakeHoldStart = performance.now();
+    else {
+      const held = performance.now() - S.brakeHoldStart;
+      if (held >= REVERSE_HOLD_MS) {
+        // engage reverse
+        S.isReversing = true;
+        // move backwards = negative speed value
+        S.player.speed -= S.player.acc * 0.9;
+        if (S.player.speed < -S.player.maxReverse) S.player.speed = -S.player.maxReverse;
+      } else {
+        // normal braking: strong deceleration
+        S.player.speed -= S.player.brakePower;
+        if (S.player.speed < 0) S.player.speed = 0;
+      }
+    }
+  } else {
+    // reset brake hold
+    S.brakeHoldStart = null;
+    S.isReversing = false;
   }
-  // Sidostyrning (flytta i x)
-  if (keys['ArrowLeft']) state.player.x -= 3;
-  if (keys['ArrowRight']) state.player.x += 3;
-  // keep player inside right-lane roughly
-  state.player.x = Math.max(320, Math.min(440, state.player.x));
-  // update movement
-  state.player.update();
+
+  // lateral movement
+  if (keys['ArrowLeft']) S.player.x -= 3;
+  if (keys['ArrowRight']) S.player.x += 3;
+
+  // clamp within right-lane (approx)
+  const minX = 320 + S.player.w/2;
+  const maxX = 480 - S.player.w/2;
+  S.player.x = Math.max(minX, Math.min(maxX, S.player.x));
+
+  // update car physics (friction, movement)
+  S.player.update();
 }
 
-// Draw scene (vertical road up)
-function draw() {
+// -- Drawing
+function drawScene() {
   // background
   ctx.fillStyle = '#77a377'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  // vertical road centered at x=380..420 (width 160)
+
+  // vertical main road
   const roadLeft = 320, roadWidth = 160;
   ctx.fillStyle = '#555'; ctx.fillRect(roadLeft, 0, roadWidth, canvas.height);
 
-  // lane separators: two lanes - draw white side lines and middle dashed
+  // side lines
   ctx.strokeStyle = 'white'; ctx.lineWidth = 3;
-  // left side
   ctx.beginPath(); ctx.moveTo(roadLeft,0); ctx.lineTo(roadLeft,canvas.height); ctx.stroke();
-  // right side
   ctx.beginPath(); ctx.moveTo(roadLeft+roadWidth,0); ctx.lineTo(roadLeft+roadWidth,canvas.height); ctx.stroke();
 
-  // middle dashed (vertical)
-  ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
-  ctx.setLineDash([18,14]);
-  ctx.beginPath(); ctx.moveTo(roadLeft+roadWidth/2,0); ctx.lineTo(roadLeft+roadWidth/2,canvas.height); ctx.stroke();
+  // middle dashed
+  ctx.setLineDash([18,14]); ctx.lineWidth = 2; ctx.beginPath();
+  ctx.moveTo(roadLeft + roadWidth/2, 0); ctx.lineTo(roadLeft + roadWidth/2, canvas.height); ctx.stroke();
   ctx.setLineDash([]);
 
-  // draw intersection if present (horizontal rectangle)
-  if (state.intersection) {
+  // intersection (horizontal)
+  if (S.intersection) {
     ctx.fillStyle = '#666';
-    ctx.fillRect(state.intersection.x, state.intersection.y, state.intersection.w, state.intersection.h);
+    ctx.fillRect(S.intersection.x, S.intersection.y, S.intersection.w, S.intersection.h);
+    // draw side edges of intersection (white)
+    ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
+    ctx.strokeRect(S.intersection.x, S.intersection.y, S.intersection.w, S.intersection.h);
   }
 
-  // draw stopline (horizontal white) if set
-  if (state.stopLine) {
+  // stop line (draw horizontal)
+  if (S.stopLine) {
     ctx.fillStyle = 'white';
-    ctx.fillRect(state.stopLine.x, state.stopLine.y, state.stopLine.w, state.stopLine.h);
+    // draw across lane center
+    ctx.fillRect(S.stopLine.x - 40, S.stopLine.y, S.stopLine.w + 80, S.stopLine.h);
   }
 
-  // draw crosswalk
-  if (state.crosswalk) {
+  // crosswalk
+  if (S.crosswalk) {
     ctx.fillStyle = 'white';
     for (let i=0;i<6;i++){
-      ctx.fillRect(state.crosswalk.x + i*8, state.crosswalk.y, 6, state.crosswalk.h);
+      ctx.fillRect(S.crosswalk.x + i*12, S.crosswalk.y, 8, S.crosswalk.h);
     }
   }
 
   // roundabout
-  if (state.roundabout) {
+  if (S.roundabout) {
     ctx.fillStyle = '#777';
-    ctx.beginPath();
-    ctx.arc(state.roundabout.x, state.roundabout.y, state.roundabout.r, 0, Math.PI*2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(S.roundabout.x, S.roundabout.y, S.roundabout.r, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#77a377';
-    ctx.beginPath();
-    ctx.arc(state.roundabout.x, state.roundabout.y, state.roundabout.r-30, 0, Math.PI*2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(S.roundabout.x, S.roundabout.y, S.roundabout.r-30, 0, Math.PI*2); ctx.fill();
   }
 
   // traffic light
-  if (state.trafficLight) {
+  if (S.trafficLight) {
     ctx.fillStyle = 'black';
-    ctx.fillRect(state.trafficLight.x - 12, state.trafficLight.y - 6, 28, 56);
-    ctx.fillStyle = state.trafficLight.state === 'red' ? 'red' : 'gray';
-    ctx.beginPath(); ctx.arc(state.trafficLight.x, state.trafficLight.y, 6,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle = state.trafficLight.state === 'green' ? 'green' : 'gray';
-    ctx.beginPath(); ctx.arc(state.trafficLight.x, state.trafficLight.y + 20, 6,0,Math.PI*2); ctx.fill();
+    ctx.fillRect(S.trafficLight.x-12, S.trafficLight.y-10, 28, 56);
+    ctx.fillStyle = (S.trafficLight.state === 'red') ? 'red' : 'gray';
+    ctx.beginPath(); ctx.arc(S.trafficLight.x, S.trafficLight.y+2, 6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = (S.trafficLight.state === 'green') ? 'green' : 'gray';
+    ctx.beginPath(); ctx.arc(S.trafficLight.x, S.trafficLight.y+24, 6,0,Math.PI*2); ctx.fill();
   }
 
-  // signs: stop, speed
-  if (state.sign) {
-    if (state.sign.type === 'stop') {
-      ctx.fillStyle = 'red'; ctx.fillRect(state.sign.x, state.sign.y, 18, 18);
-      ctx.fillStyle='white'; ctx.font='10px sans-serif'; ctx.fillText('STOP', state.sign.x-4, state.sign.y+12);
+  // sign (stop/speed)
+  if (S.sign) {
+    if (S.sign.type === 'stop') {
+      ctx.fillStyle = 'red'; ctx.fillRect(S.sign.x, S.sign.y, 18, 18);
+      ctx.fillStyle = 'white'; ctx.font='10px sans-serif'; ctx.fillText('STOP', S.sign.x-2, S.sign.y+12);
     }
-    if (state.sign.type === 'speed30') {
-      ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(state.sign.x+8, state.sign.y+8, 10,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='black'; ctx.font='10px sans-serif'; ctx.fillText('30', state.sign.x+3, state.sign.y+12);
+    if (S.sign.type === 'speed30') {
+      ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(S.sign.x+8, S.sign.y+8, 12,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='black'; ctx.font='12px sans-serif'; ctx.fillText('30', S.sign.x+2, S.sign.y+12);
     }
   }
 
-  // pedestrians
-  if (state.pedestrian) {
-    ctx.fillStyle='yellow'; ctx.fillRect(state.pedestrian.x, state.pedestrian.y, state.pedestrian.w, state.pedestrian.h);
+  // pedestrians & cyclists
+  if (S.pedestrian) { ctx.fillStyle='yellow'; ctx.fillRect(S.pedestrian.x, S.pedestrian.y, S.pedestrian.w, S.pedestrian.h); }
+  if (S.cyclist) S.cyclist.draw();
+
+  // npc (if stored as Car)
+  if (S.npc && S.npc instanceof Car) S.npc.draw();
+  // npc in roundabout stored differently
+  if (S.npc && typeof S.npc.x === 'number' && S.npc.color) {
+    ctx.fillStyle = S.npc.color; ctx.fillRect(S.npc.x-16, S.npc.y-8, 32, 16);
   }
 
-  // cyclists: draw as small rectangles
-  if (state.cyclist) state.cyclist.draw();
-
-  // npc car (if object with x,y) draw accordingly
-  if (state.npc && state.npc instanceof Car) state.npc.draw();
-  if (state.npc && typeof state.npc.x === 'number' && state.npc.color) {
-    // for roundabout npc stored differently
-    ctx.fillStyle = state.npc.color; ctx.fillRect(state.npc.x-16, state.npc.y-8, 32, 16);
-  }
-
-  // player
-  if (state.player) state.player.draw();
+  // player drawn on top
+  if (S.player) S.player.draw();
 
   // HUD
-  hud.innerHTML = `<strong>Nivå:</strong> ${state.levelIndex+2} — ${state.level ? state.level.title : ''} &nbsp; | &nbsp;
-    <strong>Liv:</strong> ${state.lives} &nbsp; | &nbsp; <strong>Poäng:</strong> ${state.score}`;
+  hud.innerHTML = `<strong>Nivå:</strong> ${levels[S.levelIndex].id} — ${levels[S.levelIndex].title} &nbsp; | &nbsp;
+    <strong>Liv:</strong> ${S.lives} &nbsp; | &nbsp; <strong>Poäng:</strong> ${S.score}`;
 }
 
-// Load level
-function loadLevel(index) {
-  state.levelIndex = index;
-  if (index < 0 || index >= levels.length) {
-    // finished all
-    endGame(true);
-    return;
-  }
-  // clear dynamic state
-  state.player = null; state.npc = null; state.cyclist = null; state.pedestrian = null;
-  state.trafficLight = null; state.intersection = null; state.stopLine = null;
-  state.crosswalk = null; state.roundabout = null; state.sign = null; state.speedLimit = null;
-  state._stopHoldStart = null;
-
-  state.level = levels[index];
-  state.level.setup();
-  state.introShown = false;
-  // show intro once
+// -- Game loop & logic
+function loadLevel(idx) {
+  if (idx < 0 || idx >= levels.length) { endGame(true); return; }
+  S.levelIndex = idx;
+  // reset dynamic scene items
+  S.player = null; S.npc = null; S.cyclist = null; S.pedestrian = null;
+  S.trafficLight = null; S.intersection = null; S.stopLine = null; S.crosswalk = null;
+  S.roundabout = null; S.sign = null; S.speedLimit = null;
+  S.brakeHoldStart = null; S.isReversing = false; S._stopHoldStart = null; S._introShown = false;
+  S.level = levels[idx];
+  S.level.setup();
+  // small delay then show intro
   setTimeout(()=> {
-    if (!state.introShown) {
-      alert(`Nivå ${state.level.id}: ${state.level.title}\n\n${state.level.intro}`);
-      state.introShown = true;
-    }
-  }, 80);
+    alert(`Nivå ${S.level.id}: ${S.level.title}\n\n${S.level.intro}`);
+  }, 120);
 }
 
-// Update logic
 function updateFrame() {
-  if (!state.running) return;
-  handleInput();
-  // per-level updates
-  if (state.level && state.level.update) state.level.update();
-  // check result
-  let res = state.level && state.level.check ? state.level.check() : null;
-  if (res === 'fail') {
-    state.lives--;
-    if (state.lives <= 0) {
-      endGame(false);
+  if (!S.running) return;
+  handleInputPerFrame();
+  // level specific update
+  if (S.level.update) S.level.update();
+  // check level status
+  if (S.level.check) {
+    const res = S.level.check();
+    if (res === 'fail') {
+      S.lives--;
+      if (S.lives <= 0) { endGame(false); return; }
+      alert('Du bröt mot regeln. Försök igen.');
+      loadLevel(S.levelIndex);
       return;
-    } else {
-      alert('Fel — du bröt regeln. Försök igen.');
-      loadLevel(state.levelIndex);
+    } else if (res === 'success') {
+      S.score += 100;
+      alert('Bra! Nivån klar.');
+      loadLevel(S.levelIndex + 1);
       return;
     }
-  } else if (res === 'success') {
-    state.score += 100;
-    alert('Bra! Nivån klar.');
-    loadLevel(state.levelIndex + 1);
-    return;
   }
 }
 
-// Input & physics
-function handleInput() {
-  if (!state.player) return;
-  // accelerate / brake
+// adapted input handler wrapper that uses S.player physics
+function handleInputPerFrame() {
+  // reset brakeHoldStart if ArrowDown not pressed
+  if (!keys['ArrowDown']) S.brakeHoldStart = null;
+
+  // handle player inputs & physics
+  if (S.player) handleInputPerFrame();
+}
+
+// prevent infinite recursion naming clash
+function handleInputPerFrame() {
+  if (!S.player) return;
+  // gas
   if (keys['ArrowUp']) {
-    state.player.speed += state.player.acc;
-    if (state.player.speed > state.player.maxSpeed) state.player.speed = state.player.maxSpeed;
+    S.player.speed += S.player.acc;
+    if (S.player.speed > S.player.maxSpeed) S.player.speed = S.player.maxSpeed;
   }
+  // brake & reverse
   if (keys['ArrowDown']) {
-    state.player.speed -= state.player.acc * 1.6;
-    if (state.player.speed < 0) state.player.speed = 0;
+    if (!S.brakeHoldStart) S.brakeHoldStart = performance.now();
+    const held = performance.now() - S.brakeHoldStart;
+    if (held >= REVERSE_HOLD_MS) {
+      // reverse engaged
+      S.isReversing = true;
+      S.player.speed -= S.player.acc * 0.9;
+      if (S.player.speed < -S.player.maxReverse) S.player.speed = -S.player.maxReverse;
+    } else {
+      // normal brake
+      S.player.speed -= S.player.brakePower;
+      if (S.player.speed < 0) S.player.speed = 0;
+    }
+  } else {
+    S.isReversing = false;
   }
+
   // lateral movement
-  if (keys['ArrowLeft']) state.player.x -= 3;
-  if (keys['ArrowRight']) state.player.x += 3;
-  // clamp to road lanes
-  state.player.x = Math.max(320 + state.player.w/2, Math.min(480 - state.player.w/2, state.player.x));
-  // update player physics
-  state.player.update();
+  if (keys['ArrowLeft']) S.player.x -= 3;
+  if (keys['ArrowRight']) S.player.x += 3;
+
+  // clamp player's lateral position
+  const minX = 320 + S.player.w/2;
+  const maxX = 480 - S.player.w/2;
+  S.player.x = Math.max(minX, Math.min(maxX, S.player.x));
+
+  // update player movement (friction applies in Car.update)
+  S.player.update();
 }
 
-// Main loop
+// main animation loop
 function loop() {
-  if (!state.running) return;
-  draw();
+  if (!S.running) return;
+  drawScene();
   updateFrame();
   requestAnimationFrame(loop);
 }
 
-// Start / restart
+// start / end helpers
 function startGame() {
   menu.classList.add('hidden');
   gameDiv.classList.remove('hidden');
   gameOverDiv.classList.add('hidden');
-  state.running = true;
-  state.levelIndex = 0; state.lives = 3; state.score = 0;
-  loadLevel(0); // levels[0] corresponds to id 2
+  S.running = true;
+  S.levelIndex = 0; S.lives = 3; S.score = 0;
+  loadLevel(0);
   requestAnimationFrame(loop);
 }
 function endGame(won) {
-  state.running = false;
+  S.running = false;
   gameDiv.classList.add('hidden');
   gameOverDiv.classList.remove('hidden');
-  finalText.textContent = won ? `Grattis! Du klarade spelet. Poäng: ${state.score}` : `Game over. Poäng: ${state.score}`;
+  finalText.textContent = won ? `Grattis! Du klarade spelet. Poäng: ${S.score}` : `Game Over. Poäng: ${S.score}`;
 }
-startBtn.addEventListener('click', startGame);
+
+// attach buttons
+if (startBtn) startBtn.addEventListener('click', startGame);
 if (restartBtn) restartBtn.addEventListener('click', () => {
   menu.classList.remove('hidden');
   gameOverDiv.classList.add('hidden');
 });
+
