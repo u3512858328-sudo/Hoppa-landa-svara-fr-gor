@@ -92,36 +92,41 @@ function playerOverStopLine() {
 // -- Levels 2..9 (levelIndex 0 => level id 2)
 const levels = [
   // LEVEL 2 - Stopplikt (T- eller fyrvägskorsning): stopplinje innan korsning
-  {
-    id: 2, title: "Stopplikt",
-    intro: "Stanna vid stopplinjen i korsningen. Stanna helt i minst 2 sekunder innan du kör in.",
-    setup: () => {
-      S.player = new Car(400, 640, 'blue');
-      // intersection is a horizontal road crossing the vertical main road
-      S.intersection = { x: 240, y: 360, w: 320, h: 120 };
-      // stopline is drawn across the right lane
-      S.stopLine = { x: 360, y: 420, w: 80, h: 6 }; // horizontal bar (we will draw it as across the lane)
-      S.sign = { x: 440, y: 440, type: 'stop' }; // stand at road edge
-      S._stopHoldStart = null;
-      // nothing else moves
-    },
-    update: () => {
-      // track stop hold if player stationary and overlapping stopline
-      if (Math.abs(S.player.speed) < 0.2 && playerOverStopLine()) {
-        if (!S._stopHoldStart) S._stopHoldStart = performance.now();
-      } else {
-        S._stopHoldStart = null;
+// LEVEL 2 - Stopplikt (korrekt stopplinje innan korsning)
+{
+  id: 2, title: "Stopplikt",
+  intro: "Stanna vid stopplinjen innan korsningen. Stå stilla i minst 2 sekunder innan du kör vidare.",
+  setup: () => {
+    S.player = new Car(400, 640, 'blue');
+    // korsning
+    S.intersection = { x: 240, y: 360, w: 320, h: 120 };
+    // stopplinjen placeras precis innan korsningens kant
+    S.stopLine = { x: 320, y: S.intersection.y + S.intersection.h + 20, w: 160, h: 6 };
+    S.sign = { x: 440, y: S.stopLine.y + 20, type: 'stop' };
+    S._stopHoldStart = null;
+    S._stopDone = false;
+  },
+  update: () => {
+    // om bilen står still och befinner sig på linjen, starta/fortsätt timer
+    if (Math.abs(S.player.speed) < 0.2 && playerOverStopLine()) {
+      if (!S._stopHoldStart) S._stopHoldStart = performance.now();
+      else if (performance.now() - S._stopHoldStart >= 2000) {
+        S._stopDone = true;
       }
-    },
-    check: () => {
-      // if player enters intersection (y less than intersection center) ensure stopHold was >= 1800ms
-      if (S.player.y < S.intersection.y + S.intersection.h / 2) {
-        if (!(S._stopHoldStart && (performance.now() - S._stopHoldStart) >= 1800)) return 'fail';
-        return 'success';
-      }
-      return null;
+    } else {
+      // släpper man gas/broms för tidigt -> nollställ
+      if (!S._stopDone) S._stopHoldStart = null;
     }
   },
+  check: () => {
+    // om bilen kör in i korsningen utan korrekt stopp -> fail
+    if (S.player.y < S.intersection.y + S.intersection.h/2) {
+      if (!S._stopDone) return 'fail';
+      return 'success';
+    }
+    return null;
+  }
+}
 
   // LEVEL 3 - Hastighetsbegränsning
   {
