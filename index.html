@@ -2,27 +2,32 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
-  <title>Trafikspel – Lär dig reglerna</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Svenska Trafikspelet</title>
+  <style>
+    body {
+      text-align: center;
+      background: #e0e0e0;
+      font-family: Arial, sans-serif;
+    }
+    #gameCanvas {
+      border: 2px solid black;
+      background: #77a377;
+      display: block;
+      margin: 20px auto;
+    }
+    #startBtn {
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-  <div id="menu" class="screen">
-    <h1>Trafikspel 🚗</h1>
-    <p>Träna på svenska trafikregler genom att spela!</p>
-    <button id="startGame">Starta spelet</button>
-  </div>
+  <h1>Svenska Trafikspelet</h1>
+  <button id="startBtn">Starta spel</button>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
 
-  <div id="gameArea" class="hidden">
-    <canvas id="canvas" width="800" height="600"></canvas>
-    <div id="hud"></div>
-  </div>
-
-  <div id="gameOver" class="screen hidden">
-    <h2>Spelet slut</h2>
-    <p id="finalScore"></p>
-    <button id="restartGame">Spela igen</button>
-  </div>
-
+  <!-- Viktigt: script sist i body -->
   <script src="script.js"></script>
 </body>
 </html>
