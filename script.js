@@ -1,510 +1,347 @@
-/* script.js - komplett spel
-   - Lodrät väg (uppåt)
-   - Stopplinje före korsning (2s krav)
-   - Trafikljus, rondell, cyklist, övergångsställe
-   - Kontroller: ↑ gas, ↓ broms (håll för back), ←/→ sidostyrning
-*/
+// === Globala variabler ===
+let canvas = document.getElementById("gameCanvas");
+let ctx = canvas.getContext("2d");
+let hud = document.getElementById("hud");
 
-// --- DOM
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const startBtn = document.getElementById('startBtn');
-const restartBtn = document.getElementById('restartBtn');
-const menu = document.getElementById('menu');
-const gameDiv = document.getElementById('game');
-const hud = document.getElementById('hud');
-const gameOverDiv = document.getElementById('gameOver');
-const finalText = document.getElementById('finalText');
-
-// --- Input
 let keys = {};
-window.addEventListener('keydown', e => { keys[e.key] = true; });
-window.addEventListener('keyup',   e => { keys[e.key] = false; });
+let running = false;
 
-// --- State
-const S = {
-  running: false,
-  levelIndex: 0, // 0 => nivå 2
+let S = {
+  player: null,
+  levelIndex: 0,
   lives: 3,
   score: 0,
-  player: null,
-  npc: null,
-  cyclist: null,
-  pedestrian: null,
-  trafficLight: null,
-  intersection: null,
-  stopLine: null,
-  crosswalk: null,
-  roundabout: null,
-  sign: null,
-  // input/time trackers
-  brakeHoldStart: null,
-  isReversing: false,
-  _stopHoldStart: null,
-  _stopDone: false
+  level: null,
+  stopTimer: 0,
+  speedLimit: null,
+  npcs: []
 };
 
-// --- Car class
+// === Händelser ===
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+// === Bilklass ===
 class Car {
-  constructor(x,y,color='blue',w=36,h=18){
-    this.x = x; this.y = y;
+  constructor(x, y, color, npc = false, speed = 0) {
+    this.x = x;
+    this.y = y;
+    this.width = 40;
+    this.height = 70;
     this.color = color;
-    this.w = w; this.h = h;
-    this.speed = 0; // px/frame, positive moves up (y decreases)
-    this.maxSpeed = 4.2;
-    this.maxReverse = 2.2;
-    this.acc = 0.12;
-    this.brakePower = 0.24;
-    this.friction = 0.96;
+    this.speed = speed;
+    this.maxSpeed = 8;
+    this.acc = 0.2;
+    this.friction = 0.05;
+    this.backTimer = 0;
+    this.npc = npc;
   }
-  update(){
-    // apply friction
-    this.speed *= this.friction;
-    if (Math.abs(this.speed) < 0.01) this.speed = 0;
-    // position update (positive speed => move up)
-    this.y -= this.speed;
-  }
-  draw(ctx){
-    ctx.save();
-    ctx.translate(this.x, this.y);
+  draw() {
     ctx.fillStyle = this.color;
-    ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillRect(-this.w/2 + 6, -this.h/4, this.w/3, this.h/2);
-    ctx.restore();
+    ctx.fillRect(this.x, this.y, this.width, this.height);
   }
-  bbox(){ return { x: this.x - this.w/2, y: this.y - this.h/2, w: this.w, h: this.h }; }
-}
-
-// --- Collision helpers
-function rectsCollide(a,b){
-  if (!a || !b) return false;
-  return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
-}
-function playerOverStopLine(){
-  if (!S.stopLine || !S.player) return false;
-  const p = S.player.bbox();
-  const s = S.stopLine;
-  return !(p.x + p.w < s.x || p.x > s.x + s.w || p.y + p.h < s.y || p.y > s.y + s.h);
-}
-
-// --- Per-level definitions (levels 2..9). levelIndex 0 => id 2
-const levels = [
-  // LEVEL 2 - Stopplikt (stopplinje PLACERAD innan korsningen)
-  {
-    id:2, title: "Stopplikt",
-    intro: "Stanna vid stopplinjen i minst 2 sekunder innan korsningen.",
-    setup: () => {
-      S.player = new Car(400, 640, 'blue');
-      S.intersection = { x: 240, y: 360, w: 320, h: 120 }; // horizontal crossing
-      // stopline located BEFORE intersection (i.e. higher y value -> lower on screen)
-      S.stopLine = { x: 320, y: S.intersection.y + S.intersection.h + 28, w: 160, h: 6 };
-      S.sign = { x: S.stopLine.x + S.stopLine.w + 8, y: S.stopLine.y + 8, type: 'stop' };
-      S._stopHoldStart = null; S._stopDone = false;
-    },
-    update: () => {
-      if (Math.abs(S.player.speed) < 0.2 && playerOverStopLine()) {
-        if (!S._stopHoldStart) S._stopHoldStart = performance.now();
-        else if (performance.now() - S._stopHoldStart >= 2000) S._stopDone = true;
-      } else {
-        if (!S._stopDone) S._stopHoldStart = null;
-      }
-    },
-    check: () => {
-      // entered intersection?
-      if (S.player.y < S.intersection.y + S.intersection.h/2) {
-        if (!S._stopDone) return 'fail';
-        return 'success';
-      }
-      return null;
+  update() {
+    if (this.npc) {
+      this.y -= this.speed; // NPC kör uppåt också
     }
-  },
+  }
+}
 
-  // LEVEL 3 - Hastighetsbegränsning
+// === Starta spel ===
+function startGame() {
+  S.levelIndex = 0;
+  S.lives = 3;
+  S.score = 0;
+  loadLevel(levels[S.levelIndex]);
+  running = true;
+  requestAnimationFrame(gameLoop);
+}
+
+// === Ladda nivå ===
+function loadLevel(level) {
+  S.level = level;
+  S.stopTimer = 0;
+  S.speedLimit = null;
+  S.npcs = [];
+  level.setup();
+  if (S.player) S.player.speed = 0;
+  alert(level.intro);
+}
+
+// === Spelets loop ===
+function gameLoop() {
+  if (!running) return;
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// === Uppdatera ===
+function update() {
+  handleInputAndPhysics();
+  if (S.level.update) S.level.update();
+
+  let result = S.level.check();
+  if (result === "success") {
+    S.score += 100;
+    S.levelIndex++;
+    if (S.levelIndex < levels.length) {
+      loadLevel(levels[S.levelIndex]);
+    } else {
+      alert("Grattis! Du klarade alla nivåer!");
+      running = false;
+    }
+  } else if (result && result.startsWith("fail")) {
+    alert(result);
+    S.lives--;
+    if (S.lives > 0) {
+      loadLevel(levels[S.levelIndex]);
+    } else {
+      alert("Spelet är slut!");
+      running = false;
+    }
+  }
+}
+
+// === Input & fysik ===
+function handleInputAndPhysics() {
+  if (!S.player) return;
+  let p = S.player;
+
+  if (keys["ArrowUp"]) {
+    p.speed += p.acc;
+    if (p.speed > p.maxSpeed) p.speed = p.maxSpeed;
+  }
+
+  if (keys["ArrowDown"]) {
+    if (p.speed > 0) {
+      p.speed -= p.acc * 2;
+    } else {
+      p.backTimer++;
+      if (p.backTimer > 20) {
+        p.speed -= p.acc;
+        if (p.speed < -p.maxSpeed / 2) p.speed = -p.maxSpeed / 2;
+      }
+    }
+  } else {
+    p.backTimer = 0;
+  }
+
+  if (!keys["ArrowUp"] && !keys["ArrowDown"]) {
+    if (p.speed > 0) p.speed -= p.friction;
+    if (p.speed < 0) p.speed += p.friction;
+    if (Math.abs(p.speed) < 0.05) p.speed = 0;
+  }
+
+  p.y -= p.speed;
+  S.npcs.forEach(npc => npc.update());
+}
+
+// === Rita ===
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Vägen
+  ctx.fillStyle = "gray";
+  ctx.fillRect(300, 0, 200, canvas.height);
+
+  // Mittlinje
+  ctx.strokeStyle = "white";
+  ctx.setLineDash([20, 20]);
+  ctx.beginPath();
+  ctx.moveTo(400, 0);
+  ctx.lineTo(400, canvas.height);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Skyltar
+  if (S.sign) {
+    ctx.fillStyle = "black";
+    if (S.sign.type === "yield") ctx.fillText("VÄJNINGSPLIKT", S.sign.x, S.sign.y);
+    if (S.sign.type === "stop") {
+      ctx.fillStyle = "red";
+      ctx.fillText("STOPP", S.sign.x, S.sign.y);
+      ctx.strokeStyle = "white";
+      ctx.beginPath();
+      ctx.moveTo(300, S.sign.lineY);
+      ctx.lineTo(500, S.sign.lineY);
+      ctx.stroke();
+    }
+    if (S.sign.type === "speed30") ctx.fillText("30", S.sign.x, S.sign.y);
+    if (S.sign.type === "speed50") ctx.fillText("50", S.sign.x, S.sign.y);
+  }
+
+  // NPCs
+  S.npcs.forEach(npc => npc.draw());
+
+  // Spelarens bil
+  if (S.player) S.player.draw();
+
+  // HUD
+  let kmh = S.player ? Math.round(S.player.speed * 10) : 0;
+  hud.innerHTML = `<strong>Nivå:</strong> ${levels[S.levelIndex].id} — ${levels[S.levelIndex].title}
+    &nbsp; | <strong>Liv:</strong> ${S.lives}
+    &nbsp; | <strong>Poäng:</strong> ${S.score}
+    &nbsp; | <strong>Fart:</strong> ${kmh} km/h`;
+}
+
+// === Nivåer ===
+let levels = [
   {
-    id:3, title: "Hastighetsbegränsning",
-    intro: "Håll hastigheten under gränsen (exemp: 4.5 px/frame).",
+    id: 1,
+    title: "Väjningsplikt",
+    intro: "Väj för mötande bil i korsningen.",
     setup: () => {
-      S.player = new Car(400, 640, 'blue');
-      S.sign = { x: 440, y: 420, type: 'speed30' };
-      S.speedLimit = 4.5;
+      S.player = new Car(380, 540, "blue");
+      S.sign = { x: 350, y: 200, type: "yield" };
+      S.npcs.push(new Car(420, -100, "red", true, 3));
     },
     update: () => {},
     check: () => {
-      if (S.player.speed > S.speedLimit) return 'fail';
-      if (S.player.y < 80) return 'success';
-      return null;
-    }
-  },
-
-  // LEVEL 4 - Övergångsställe (gånger)
-  {
-    id:4, title: "Övergångsställe",
-    intro: "Stanna för gående som korsar på övergångsstället.",
-    setup: () => {
-      S.player = new Car(400, 640, 'blue');
-      S.crosswalk = { x: 360, y: 420, w: 80, h: 8 };
-      S.pedestrian = { x: 320, y: 420, w:14, h:28, speed:0.6, active:true };
-    },
-    update: () => {
-      if (S.pedestrian && S.pedestrian.active) S.pedestrian.x += S.pedestrian.speed;
-    },
-    check: () => {
-      if (S.pedestrian && rectsCollide(S.pedestrian, S.player.bbox())) return 'fail';
-      if (S.player.y < 80) return 'success';
-      return null;
-    }
-  },
-
-  // LEVEL 5 - Cyklist i korsning
-  {
-    id:5, title: "Cyklist",
-    intro: "Lämna företräde åt cyklisten som korsar från höger.",
-    setup: () => {
-      S.player = new Car(400, 640, 'blue');
-      S.intersection = { x: 240, y: 360, w: 320, h: 120 };
-      S.cyclist = new Car(540, 380, 'green', 22, 12);
-      S.cyclist.speed = 1.6;
-    },
-    update: () => { if (S.cyclist) S.cyclist.x -= S.cyclist.speed; },
-    check: () => {
-      if (S.cyclist && rectsCollide(S.cyclist.bbox(), S.player.bbox())) return 'fail';
-      if (S.player.y < 80) return 'success';
-      return null;
-    }
-  },
-
-  // LEVEL 6 - Högerregeln
-  {
-    id:6, title: "Högerregeln",
-    intro: "Lämna företräde åt fordon som kommer från höger.",
-    setup: () => {
-      S.player = new Car(400, 640, 'blue');
-      S.intersection = { x: 240, y: 360, w: 320, h: 120 };
-      S.npc = new Car(540, 380, 'red'); S.npc.speed = 1.9; // from right to left
-    },
-    update: () => { if (S.npc) S.npc.x -= S.npc.speed; },
-    check: () => {
-      if (S.npc && rectsCollide(S.npc.bbox(), S.player.bbox())) return 'fail';
-      if (S.player.y < 80) return 'success';
-      return null;
-    }
-  },
-
-  // LEVEL 7 - Trafikljus
-  {
-    id:7, title: "Trafikljus",
-    intro: "Stanna vid rött, kör på grönt.",
-    setup: () => {
-      S.player = new Car(400, 640, 'blue');
-      S.trafficLight = { x: 400, y: 420, state: 'red', timer: 0 };
-      S.lightCycle = { red: 220, green: 220 };
-    },
-    update: () => {
-      if (!S.trafficLight) return;
-      S.trafficLight.timer++;
-      const period = S.lightCycle.red + S.lightCycle.green;
-      const t = S.trafficLight.timer % period;
-      S.trafficLight.state = (t < S.lightCycle.red) ? 'red' : 'green';
-    },
-    check: () => {
-      if (S.trafficLight && S.trafficLight.state === 'red' && S.player.y < S.trafficLight.y + 8) return 'fail';
-      if (S.player.y < 80) return 'success';
-      return null;
-    }
-  },
-
-  // LEVEL 8 - Rondell
-  {
-    id:8, title: "Rondell",
-    intro: "Lämna företräde åt fordon i rondellen.",
-    setup: () => {
-      S.player = new Car(400, 640, 'blue');
-      S.roundabout = { x: 400, y: 360, r: 70 };
-      S.npc = { angle: -Math.PI/2, speed: 0.02, color: 'red', x: null, y: null };
-    },
-    update: () => {
-      if (S.npc) { S.npc.angle += S.npc.speed; S.npc.x = S.roundabout.x + Math.cos(S.npc.angle)*S.roundabout.r; S.npc.y = S.roundabout.y + Math.sin(S.npc.angle)*S.roundabout.r; }
-    },
-    check: () => {
-      const npcRect = S.npc ? { x:S.npc.x-16, y:S.npc.y-8, w:32, h:16 } : null;
-      if (npcRect && rectsCollide(npcRect, S.player.bbox())) return 'fail';
-      if (S.player.y < 120) return 'success';
-      return null;
-    }
-  },
-
-  // LEVEL 9 - Slutprov (kombination)
-  {
-    id:9, title: "Slutprov",
-    intro: "Kombination: stopplinje + gående + trafikljus i korsning.",
-    setup: () => {
-      S.player = new Car(400, 680-40, 'blue');
-      S.stopLine = { x: 320, y: 480, w: 160, h: 6 };
-      S.intersection = { x: 240, y: 340, w: 320, h: 120 };
-      S.pedestrian = { x: 320, y: 340, w:14, h:28, speed:0.6 };
-      S.trafficLight = { x: 400, y: 420, state:'red', timer:0 };
-      S.lightCycle = { red:200, green:200 };
-      S._stopHoldStart = null; S._stopDone = false;
-    },
-    update: () => {
-      if (S.pedestrian) S.pedestrian.x += S.pedestrian.speed;
-      if (S.trafficLight) {
-        S.trafficLight.timer++;
-        const period = S.lightCycle.red + S.lightCycle.green;
-        const t = S.trafficLight.timer % period;
-        S.trafficLight.state = (t < S.lightCycle.red) ? 'red' : 'green';
+      for (let npc of S.npcs) {
+        if (S.player.x < npc.x + npc.width &&
+            S.player.x + S.player.width > npc.x &&
+            S.player.y < npc.y + npc.height &&
+            S.player.y + S.player.height > npc.y) {
+          return "fail: Du väjde inte!";
+        }
       }
-      if (Math.abs(S.player.speed) < 0.25 && playerOverStopLine()) {
-        if (!S._stopHoldStart) S._stopHoldStart = performance.now();
-        else if (performance.now() - S._stopHoldStart >= 2000) S._stopDone = true;
-      } else {
-        if (!S._stopDone) S._stopHoldStart = null;
-      }
+      if (S.player.y < 50) return "success";
+      return null;
+    }
+  },
+  {
+    id: 2,
+    title: "Stopplikt",
+    intro: "Stanna vid stopplinjen i minst 2 sekunder.",
+    setup: () => {
+      S.player = new Car(380, 540, "blue");
+      S.sign = { x: 350, y: 200, type: "stop", lineY: 250 };
     },
+    update: () => {},
     check: () => {
-      if (S.pedestrian && rectsCollide(S.pedestrian, S.player.bbox())) return 'fail';
-      if (S.trafficLight && S.trafficLight.state === 'red' && S.player.y < S.trafficLight.y + 8) return 'fail';
-      if (S.player.y < S.intersection.y + S.intersection.h/2) {
-        if (!S._stopDone) return 'fail';
-        return 'success';
+      if (S.player.y < S.sign.lineY && S.stopTimer < 120) {
+        return "fail: Du stannade inte vid stopplinjen!";
       }
+      if (S.player.y < 50) return "success";
+      if (Math.abs(S.player.speed) < 0.1 &&
+          S.player.y <= S.sign.lineY + 5 &&
+          S.player.y >= S.sign.lineY - 5) {
+        S.stopTimer++;
+      }
+      return null;
+    }
+  },
+  {
+    id: 3,
+    title: "Hastighetsbegränsning 30",
+    intro: "Kör inte över 30 km/h.",
+    setup: () => {
+      S.player = new Car(380, 540, "blue");
+      S.sign = { x: 350, y: 250, type: "speed30" };
+      S.speedLimit = 3;
+    },
+    update: () => {},
+    check: () => {
+      let kmh = Math.round(S.player.speed * 10);
+      if (S.player.speed > S.speedLimit) {
+        return "fail: Du körde för fort! (" + kmh + " km/h)";
+      }
+      if (S.player.y < 50) return "success";
+      return null;
+    }
+  },
+  {
+    id: 4,
+    title: "Hastighetsbegränsning 50",
+    intro: "Kör inte över 50 km/h.",
+    setup: () => {
+      S.player = new Car(380, 540, "blue");
+      S.sign = { x: 350, y: 250, type: "speed50" };
+      S.speedLimit = 5;
+    },
+    update: () => {},
+    check: () => {
+      let kmh = Math.round(S.player.speed * 10);
+      if (S.player.speed > S.speedLimit) {
+        return "fail: Du körde för fort! (" + kmh + " km/h)";
+      }
+      if (S.player.y < 50) return "success";
+      return null;
+    }
+  },
+  {
+    id: 5,
+    title: "Fotgängare",
+    intro: "Stanna för fotgängare vid övergångsställe.",
+    setup: () => {
+      S.player = new Car(380, 540, "blue");
+      S.sign = null;
+      S.npcs.push(new Car(360, 200, "green", true, 0)); // gående som står still
+    },
+    update: () => {},
+    check: () => {
+      let ped = S.npcs[0];
+      if (S.player.y < ped.y + ped.height && S.player.speed > 0) {
+        return "fail: Du körde över fotgängaren!";
+      }
+      if (S.player.y < 50) return "success";
+      return null;
+    }
+  },
+  {
+    id: 6,
+    title: "Trafiksignal röd",
+    intro: "Stanna vid rödljus.",
+    setup: () => {
+      S.player = new Car(380, 540, "blue");
+      S.sign = { x: 350, y: 250, type: "redlight", lineY: 300 };
+    },
+    update: () => {},
+    check: () => {
+      if (S.player.y < S.sign.lineY) {
+        return "fail: Du körde mot rött!";
+      }
+      if (S.player.y < 50) return "success";
+      return null;
+    }
+  },
+  {
+    id: 7,
+    title: "Trafiksignal grön",
+    intro: "Kör när det är grönt.",
+    setup: () => {
+      S.player = new Car(380, 540, "blue");
+    },
+    update: () => {},
+    check: () => {
+      if (S.player.y < 50) return "success";
+      return null;
+    }
+  },
+  {
+    id: 8,
+    title: "Slutprov",
+    intro: "Blanda regler – visa att du kan!",
+    setup: () => {
+      S.player = new Car(380, 540, "blue");
+      S.sign = { x: 350, y: 200, type: "stop", lineY: 250 };
+      S.speedLimit = 4;
+      S.npcs.push(new Car(420, -100, "red", true, 3));
+    },
+    update: () => {},
+    check: () => {
+      if (S.player.speed > S.speedLimit) return "fail: Du körde för fort!";
+      for (let npc of S.npcs) {
+        if (S.player.x < npc.x + npc.width &&
+            S.player.x + S.player.width > npc.x &&
+            S.player.y < npc.y + npc.height &&
+            S.player.y + S.player.height > npc.y) {
+          return "fail: Du väjde inte!";
+        }
+      }
+      if (S.player.y < 50) return "success";
       return null;
     }
   }
 ];
-
-// --- Reverse hold threshold
-const REVERSE_HOLD_MS = 700;
-
-// --- Input & physics handler (single function)
-function handleInputAndPhysics(){
-  if (!S.player) return;
-
-  // Gas
-  if (keys['ArrowUp']) {
-    S.player.speed += S.player.acc;
-    if (S.player.speed > S.player.maxSpeed) S.player.speed = S.player.maxSpeed;
-  }
-
-  // Brake / reverse
-  if (keys['ArrowDown']) {
-    if (!S.brakeHoldStart) S.brakeHoldStart = performance.now();
-    const held = performance.now() - S.brakeHoldStart;
-    if (held >= REVERSE_HOLD_MS) {
-      // engage reverse
-      S.isReversing = true;
-      S.player.speed -= S.player.acc * 0.9;
-      if (S.player.speed < -S.player.maxReverse) S.player.speed = -S.player.maxReverse;
-    } else {
-      // braking toward 0
-      S.player.speed -= S.player.brakePower;
-      if (S.player.speed < 0) S.player.speed = 0;
-    }
-  } else {
-    S.brakeHoldStart = null;
-    S.isReversing = false;
-  }
-
-  // lateral movement
-  if (keys['ArrowLeft']) S.player.x -= 3;
-  if (keys['ArrowRight']) S.player.x += 3;
-
-  // clamp player to right-lane region
-  const minX = 320 + S.player.w/2;
-  const maxX = 480 - S.player.w/2;
-  S.player.x = Math.max(minX, Math.min(maxX, S.player.x));
-
-  // update player physics
-  S.player.update();
-}
-
-// --- Draw scene
-function draw(){
-  // background
-  ctx.fillStyle = '#77a377'; ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // vertical main road (centered)
-  const roadLeft = 320, roadWidth = 160;
-  ctx.fillStyle = '#555'; ctx.fillRect(roadLeft, 0, roadWidth, canvas.height);
-
-  // side lines
-  ctx.strokeStyle = 'white'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(roadLeft,0); ctx.lineTo(roadLeft,canvas.height); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(roadLeft+roadWidth,0); ctx.lineTo(roadLeft+roadWidth,canvas.height); ctx.stroke();
-
-  // middle dashed
-  ctx.setLineDash([18,14]); ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(roadLeft + roadWidth/2, 0); ctx.lineTo(roadLeft + roadWidth/2, canvas.height); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // intersection (horizontal)
-  if (S.intersection) {
-    ctx.fillStyle = '#666'; ctx.fillRect(S.intersection.x, S.intersection.y, S.intersection.w, S.intersection.h);
-    ctx.strokeStyle = '#444'; ctx.lineWidth = 2; ctx.strokeRect(S.intersection.x, S.intersection.y, S.intersection.w, S.intersection.h);
-  }
-
-  // stop line (draw horizontal across lane)
-  if (S.stopLine) {
-    ctx.fillStyle = 'white';
-    // draw wider white line centered on stopLine.x..x+w
-    ctx.fillRect(S.stopLine.x, S.stopLine.y, S.stopLine.w, S.stopLine.h);
-  }
-
-  // crosswalk
-  if (S.crosswalk) {
-    ctx.fillStyle = 'white';
-    for (let i=0; i<6; i++) ctx.fillRect(S.crosswalk.x + i*12, S.crosswalk.y, 8, S.crosswalk.h);
-  }
-
-  // roundabout
-  if (S.roundabout) {
-    ctx.fillStyle = '#777'; ctx.beginPath(); ctx.arc(S.roundabout.x, S.roundabout.y, S.roundabout.r, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#77a377'; ctx.beginPath(); ctx.arc(S.roundabout.x, S.roundabout.y, S.roundabout.r-30, 0, Math.PI*2); ctx.fill();
-  }
-
-  // traffic light
-  if (S.trafficLight) {
-    ctx.fillStyle = 'black'; ctx.fillRect(S.trafficLight.x-12, S.trafficLight.y-10, 28, 56);
-    ctx.fillStyle = (S.trafficLight.state === 'red') ? 'red' : 'gray';
-    ctx.beginPath(); ctx.arc(S.trafficLight.x, S.trafficLight.y+2, 6,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle = (S.trafficLight.state === 'green') ? 'green' : 'gray';
-    ctx.beginPath(); ctx.arc(S.trafficLight.x, S.trafficLight.y+24, 6,0,Math.PI*2); ctx.fill();
-  }
-
-  // signs
-  if (S.sign) {
-    if (S.sign.type === 'stop') {
-      ctx.fillStyle = 'red'; ctx.fillRect(S.sign.x, S.sign.y, 18, 18);
-      ctx.fillStyle = 'white'; ctx.font='10px sans-serif'; ctx.fillText('STOP', S.sign.x-2, S.sign.y+12);
-    }
-    if (S.sign.type === 'speed30') {
-      ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(S.sign.x+8, S.sign.y+8, 12,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='black'; ctx.font='12px sans-serif'; ctx.fillText('30', S.sign.x+2, S.sign.y+12);
-    }
-  }
-
-  // pedestrian
-  if (S.pedestrian) { ctx.fillStyle='yellow'; ctx.fillRect(S.pedestrian.x, S.pedestrian.y, S.pedestrian.w, S.pedestrian.h); }
-
-  // cyclist
-  if (S.cyclist) S.cyclist.draw(ctx);
-
-  // npc
-  if (S.npc instanceof Car) S.npc.draw(ctx);
-  if (S.npc && S.npc.color && typeof S.npc.x === 'number') {
-    ctx.fillStyle = S.npc.color; ctx.fillRect(S.npc.x-16, S.npc.y-8, 32, 16);
-  }
-
-  // player on top
-  if (S.player) S.player.draw(ctx);
-
-  // HUD
-  hud.innerHTML = `<strong>Nivå:</strong> ${levels[S.levelIndex].id} — ${levels[S.levelIndex].title} &nbsp; | &nbsp;
-    <strong>Liv:</strong> ${S.lives} &nbsp; | &nbsp; <strong>Poäng:</strong> ${S.score}`;
-}
-
-// --- Load / run levels
-function loadLevel(idx) {
-  if (idx < 0 || idx >= levels.length) { endGame(true); return; }
-  S.levelIndex = idx;
-  // reset scene
-  S.player = null; S.npc = null; S.cyclist = null; S.pedestrian = null;
-  S.trafficLight = null; S.intersection = null; S.stopLine = null; S.crosswalk = null;
-  S.roundabout = null; S.sign = null; S.speedLimit = null;
-  S.brakeHoldStart = null; S.isReversing = false; S._stopHoldStart = null; S._stopDone = false;
-
-  S.level = levels[idx];
-  S.level.setup();
-  // show short intro
-  setTimeout(()=> alert(`Nivå ${S.level.id}: ${S.level.title}\n\n${S.level.intro}`), 80);
-}
-
-function updateFrame(){
-  if (!S.running) return;
-  handleInputAndPhysics();
-  if (S.level && S.level.update) S.level.update();
-  // check level rules
-  const res = S.level && S.level.check ? S.level.check() : null;
-  if (res === 'fail') {
-    S.lives--;
-    if (S.lives <= 0) { endGame(false); return; }
-    alert('Du bröt mot regeln. Försök igen.');
-    loadLevel(S.levelIndex);
-    return;
-  } else if (res === 'success') {
-    S.score += 100;
-    alert('Bra! Nivån klar.');
-    loadLevel(S.levelIndex + 1);
-    return;
-  }
-}
-
-// input & physics
-function handleInputAndPhysics() {
-  if (!S.player) return;
-
-  // gas
-  if (keys['ArrowUp']) {
-    S.player.speed += S.player.acc;
-    if (S.player.speed > S.player.maxSpeed) S.player.speed = S.player.maxSpeed;
-  }
-
-  // brake / reverse
-  if (keys['ArrowDown']) {
-    if (!S.brakeHoldStart) S.brakeHoldStart = performance.now();
-    const held = performance.now() - S.brakeHoldStart;
-    if (held >= REVERSE_HOLD_MS) {
-      S.isReversing = true;
-      S.player.speed -= S.player.acc * 0.9;
-      if (S.player.speed < -S.player.maxReverse) S.player.speed = -S.player.maxReverse;
-    } else {
-      S.player.speed -= S.player.brakePower;
-      if (S.player.speed < 0) S.player.speed = 0;
-    }
-  } else {
-    S.brakeHoldStart = null;
-    S.isReversing = false;
-  }
-
-  // lateral
-  if (keys['ArrowLeft']) S.player.x -= 3;
-  if (keys['ArrowRight']) S.player.x += 3;
-  // clamp lateral position into lane area
-  const minX = 320 + S.player.w/2;
-  const maxX = 480 - S.player.w/2;
-  S.player.x = Math.max(minX, Math.min(maxX, S.player.x));
-
-  S.player.update();
-}
-
-// animation loop
-function loop(){
-  if (!S.running) return;
-  draw();
-  updateFrame();
-  requestAnimationFrame(loop);
-}
-
-// start/end
-function startGame(){
-  menu.classList.add('hidden');
-  gameDiv.classList.remove('hidden');
-  gameOverDiv.classList.add('hidden');
-  S.running = true; S.levelIndex = 0; S.lives = 3; S.score = 0;
-  loadLevel(0);
-  requestAnimationFrame(loop);
-}
-function endGame(won){
-  S.running = false;
-  gameDiv.classList.add('hidden');
-  gameOverDiv.classList.remove('hidden');
-  finalText.textContent = won ? `Grattis! Du klarade spelet. Poäng: ${S.score}` : `Game over. Poäng: ${S.score}`;
-}
-
-// attach buttons
-if (startBtn) startBtn.addEventListener('click', startGame);
-if (restartBtn) restartBtn.addEventListener('click', ()=> { menu.classList.remove('hidden'); gameOverDiv.classList.add('hidden'); });
-
-// expose state for debugging
-window.__S = S;
