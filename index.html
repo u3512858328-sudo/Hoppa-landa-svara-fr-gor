@@ -1,41 +1,15 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="sv">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Köra bil</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <title>Trafikspel</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <h1>Lukas roliga spel</h1>
-    <p class="hint">Styr: ↑ gas • ↓ broms/back (håll för back) • ←/→ sidostyrning</p>
-  </header>
-
-  <main>
-    <section id="menu" class="screen">
-      <h2>Start</h2>
-      <p>Spelet börjar på nivå 2 (stopplikt). Följ instruktionerna för varje nivå.</p>
-      <button id="startBtn" class="btn">Starta spel</button>
-      <div class="small">Du har 3 liv. Lycka till!</div>
-    </section>
-
-    <section id="game" class="hidden">
-      <canvas id="gameCanvas" width="800" height="680"></canvas>
-      <div id="hud" class="hud"></div>
-    </section>
-
-    <section id="gameOver" class="screen hidden">
-      <h2>Spelet slut</h2>
-      <p id="finalText"></p>
-      <button id="restartBtn" class="btn">Tillbaka till meny</button>
-    </section>
-  </main>
-
-  <footer>
-    <small>Byggt för trafikträning — högertrafik antagen.</small>
-  </footer>
-
+  <h1>Trafikspel – lär dig svenska trafikregler</h1>
+  <button id="startBtn" onclick="startGame()">Starta spel</button>
+  <div id="hud">Tryck på "Starta spel" för att börja</div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
   <script src="script.js"></script>
 </body>
 </html>
