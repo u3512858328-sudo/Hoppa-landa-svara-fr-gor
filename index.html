@@ -1,38 +1,19 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-  <meta charset="utf-8" />
-  <title>Trafikplattformsspel — sidscroll</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <title>Traffic Quiz Platformer</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Trafikplattformsspel — träna trafikregler medan du hoppar åt sidan</h1>
-
-  <div id="gameWrap">
-    <canvas id="gameCanvas" width="1000" height="560"></canvas>
-
-    <div id="hud">
-      <div id="score">Poäng: 0</div>
-      <div id="info">← → = rörelse · Space = hoppa</div>
+  <h1>Trafikplattformsspel</h1>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="questionContainer">
+      <div id="questionText"></div>
+      <div id="answers"></div>
     </div>
   </div>
-
-  <!-- Frågemodal -->
-  <div id="questionContainer" class="hidden" aria-hidden="true">
-    <div id="questionBox">
-      <p id="questionText"></p>
-      <div id="answers">
-        <button class="answerBtn" data-index="0"></button>
-        <button class="answerBtn" data-index="1"></button>
-        <button class="answerBtn" data-index="2"></button>
-        <button class="answerBtn" data-index="3"></button>
-      </div>
-      <div id="qFooter">
-        <button id="closeQuestion" class="small hidden">Stäng</button>
-      </div>
-    </div>
-  </div>
-
   <script src="script.js"></script>
 </body>
 </html>
