@@ -2,21 +2,23 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8" />
-  <title>Trafikplattformsspel</title>
+  <title>Trafikplattformsspel — sidscroll</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Trafikplattformsspel – träna regler medan du hoppar!</h1>
+  <h1>Trafikplattformsspel — träna trafikregler medan du hoppar åt sidan</h1>
+
   <div id="gameWrap">
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas" width="1000" height="560"></canvas>
+
     <div id="hud">
       <div id="score">Poäng: 0</div>
-      <div id="instr">← → = rörelse · Space = hoppa</div>
+      <div id="info">← → = rörelse · Space = hoppa</div>
     </div>
   </div>
 
-  <!-- Fråge-modal -->
-  <div id="questionContainer" class="hidden">
+  <!-- Frågemodal -->
+  <div id="questionContainer" class="hidden" aria-hidden="true">
     <div id="questionBox">
       <p id="questionText"></p>
       <div id="answers">
@@ -25,7 +27,9 @@
         <button class="answerBtn" data-index="2"></button>
         <button class="answerBtn" data-index="3"></button>
       </div>
-      <button id="closeQuestion" class="small hidden">Stäng</button>
+      <div id="qFooter">
+        <button id="closeQuestion" class="small hidden">Stäng</button>
+      </div>
     </div>
   </div>
 
