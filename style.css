@@ -18,7 +18,7 @@ h1 {
 }
 
 canvas {
-  background: #87CEEB;
+  background: linear-gradient(to top, #87CEEB 0%, #bde0fe 100%);
   display: block;
   margin: 0 auto;
   border: 2px solid #333;
@@ -44,6 +44,13 @@ canvas {
   padding: 10px 15px;
   font-size: 16px;
   cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid #333;
+  transition: 0.2s;
+}
+
+.answerBtn:hover {
+  background-color: #f0f0f0;
 }
 
 #hud {
