@@ -2,14 +2,24 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
-  <title>Lukas Trafikspel</title>
+  <title>Trafikplattformsspel</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Trafikspel – lär dig svenska trafikregler</h1>
-  <button id="startBtn" onclick="startGame()">Starta spel</button>
-  <div id="hud">Tryck på "Starta spel" för att börja</div>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <h1>Trafikplattformsspel</h1>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+  </div>
+  <div id="questionContainer" class="hidden">
+    <p id="questionText"></p>
+    <div id="answers">
+      <button class="answerBtn" data-index="0"></button>
+      <button class="answerBtn" data-index="1"></button>
+      <button class="answerBtn" data-index="2"></button>
+      <button class="answerBtn" data-index="3"></button>
+    </div>
+  </div>
+  <div id="hud">Poäng: <span id="score">0</span></div>
   <script src="script.js"></script>
 </body>
 </html>
