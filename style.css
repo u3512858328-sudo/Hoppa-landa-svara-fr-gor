@@ -1,71 +1,54 @@
-* { box-sizing: border-box; }
 body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: linear-gradient(#87CEEB, #cfefff);
+  font-family: Arial, sans-serif;
+  background: #e0e0e0;
   text-align: center;
-  color: #111;
+  margin: 0;
+  overflow: hidden;
 }
-h1 { margin: 12px 0; font-size: 20px; }
 
-#gameWrap { width: 1000px; margin: 0 auto; position: relative; }
+h1 {
+  margin-top: 10px;
+}
+
+#gameContainer {
+  position: relative;
+  width: 800px;
+  margin: 0 auto;
+}
 
 canvas {
+  background: #87CEEB;
   display: block;
-  margin: 0 auto;
-  border-radius: 6px;
-  border: 3px solid #333;
-  background: linear-gradient(#87CEEB, #bde0fe);
+  border: 2px solid #333;
 }
-
-#hud {
-  display:flex;
-  justify-content: space-between;
-  margin-top: 6px;
-  font-weight: bold;
-  width: 1000px;
-  margin-left: auto;
-  margin-right: auto;
-  padding: 4px 6px;
-  color: #fff;
-}
-#score { background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 6px; }
-#info { padding: 6px 10px; }
 
 #questionContainer {
-  position: fixed;
-  left: 0; top: 0; right: 0; bottom: 0;
-  display:flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.45);
-  z-index: 20;
-}
-
-#questionBox {
-  background: white;
-  padding: 18px;
-  border-radius: 10px;
-  width: 640px;
-  max-width: 95%;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-  text-align: left;
-}
-
-#questionBox p { font-size: 18px; margin: 0 0 12px 0; }
-
-#answers { display:flex; flex-wrap: wrap; gap: 8px; }
-.answerBtn {
-  flex: 1 1 48%;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(255,255,255,0.9);
   padding: 10px;
-  font-size: 16px;
-  border-radius: 8px;
-  border: 1px solid #333;
-  cursor: pointer;
-  background: #fafafa;
+  border-radius: 5px;
+  min-width: 400px;
 }
-.answerBtn:hover { background: #f0f0f0; }
 
-.small { margin-top:10px; padding:6px 10px; font-size:14px; }
+.answerBtn {
+  display: block;
+  margin: 5px 0;
+  padding: 5px;
+  background: #ccc;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  border-radius: 3px;
+}
 
-.hidden { display: none; }
+.answerBtn:hover {
+  background: #aaa;
+}
+
+.platform {
+  position: absolute;
+  background: #555;
+  border: 1px solid #333;
+}
