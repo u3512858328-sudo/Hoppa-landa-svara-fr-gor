@@ -14,7 +14,8 @@ let S = {
   level: null,
   stopTimer: 0,
   speedLimit: null,
-  npcs: []
+  npcs: [],
+  sign: null
 };
 
 // === Händelser ===
@@ -38,11 +39,13 @@ class Car {
   }
   draw() {
     ctx.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y, this.width, this.height);
+    ctx.beginPath();
+    ctx.roundRect(this.x, this.y, this.width, this.height, 8);
+    ctx.fill();
   }
   update() {
     if (this.npc) {
-      this.y -= this.speed; // NPC kör uppåt också
+      this.y += this.speed; // NPC rör sig nedåt
     }
   }
 }
@@ -63,12 +66,13 @@ function loadLevel(level) {
   S.stopTimer = 0;
   S.speedLimit = null;
   S.npcs = [];
+  S.sign = null;
   level.setup();
   if (S.player) S.player.speed = 0;
   alert(level.intro);
 }
 
-// === Spelets loop ===
+// === Spel-loop ===
 function gameLoop() {
   if (!running) return;
   update();
@@ -157,7 +161,8 @@ function draw() {
   // Skyltar
   if (S.sign) {
     ctx.fillStyle = "black";
-    if (S.sign.type === "yield") ctx.fillText("VÄJNINGSPLIKT", S.sign.x, S.sign.y);
+    ctx.font = "18px Arial";
+    if (S.sign.type === "yield") ctx.fillText("Väj för höger", S.sign.x, S.sign.y);
     if (S.sign.type === "stop") {
       ctx.fillStyle = "red";
       ctx.fillText("STOPP", S.sign.x, S.sign.y);
@@ -169,12 +174,13 @@ function draw() {
     }
     if (S.sign.type === "speed30") ctx.fillText("30", S.sign.x, S.sign.y);
     if (S.sign.type === "speed50") ctx.fillText("50", S.sign.x, S.sign.y);
+    if (S.sign.type === "redlight") ctx.fillText("RÖTT", S.sign.x, S.sign.y);
   }
 
   // NPCs
   S.npcs.forEach(npc => npc.draw());
 
-  // Spelarens bil
+  // Spelare
   if (S.player) S.player.draw();
 
   // HUD
@@ -189,22 +195,21 @@ function draw() {
 let levels = [
   {
     id: 1,
-    title: "Väjningsplikt",
-    intro: "Väj för mötande bil i korsningen.",
+    title: "Fyrvägskorsning – Högerregel",
+    intro: "Vänta för bilar som kommer från höger vid en korsning.",
     setup: () => {
-      S.player = new Car(380, 540, "blue");
-      S.sign = { x: 350, y: 200, type: "yield" };
-      S.npcs.push(new Car(420, -100, "red", true, 3));
+      S.player = new Car(380, 500, "blue");
+      S.npcs.push(new Car(300, 100, "red", true, 2));
+      S.sign = { type: "yield", x: 350, y: 250 };
     },
     update: () => {},
     check: () => {
-      for (let npc of S.npcs) {
-        if (S.player.x < npc.x + npc.width &&
-            S.player.x + S.player.width > npc.x &&
-            S.player.y < npc.y + npc.height &&
-            S.player.y + S.player.height > npc.y) {
-          return "fail: Du väjde inte!";
-        }
+      let npc = S.npcs[0];
+      if (S.player.x < npc.x + npc.width &&
+          S.player.x + S.player.width > npc.x &&
+          S.player.y < npc.y + npc.height &&
+          S.player.y + S.player.height > npc.y) {
+        return "fail: Du bröt mot högerregeln!";
       }
       if (S.player.y < 50) return "success";
       return null;
@@ -215,7 +220,7 @@ let levels = [
     title: "Stopplikt",
     intro: "Stanna vid stopplinjen i minst 2 sekunder.",
     setup: () => {
-      S.player = new Car(380, 540, "blue");
+      S.player = new Car(380, 500, "blue");
       S.sign = { x: 350, y: 200, type: "stop", lineY: 250 };
     },
     update: () => {},
@@ -237,15 +242,14 @@ let levels = [
     title: "Hastighetsbegränsning 30",
     intro: "Kör inte över 30 km/h.",
     setup: () => {
-      S.player = new Car(380, 540, "blue");
+      S.player = new Car(380, 500, "blue");
       S.sign = { x: 350, y: 250, type: "speed30" };
       S.speedLimit = 3;
     },
     update: () => {},
     check: () => {
-      let kmh = Math.round(S.player.speed * 10);
       if (S.player.speed > S.speedLimit) {
-        return "fail: Du körde för fort! (" + kmh + " km/h)";
+        return `fail: Du körde för fort! (${Math.round(S.player.speed*10)} km/h)`;
       }
       if (S.player.y < 50) return "success";
       return null;
@@ -256,15 +260,14 @@ let levels = [
     title: "Hastighetsbegränsning 50",
     intro: "Kör inte över 50 km/h.",
     setup: () => {
-      S.player = new Car(380, 540, "blue");
+      S.player = new Car(380, 500, "blue");
       S.sign = { x: 350, y: 250, type: "speed50" };
       S.speedLimit = 5;
     },
     update: () => {},
     check: () => {
-      let kmh = Math.round(S.player.speed * 10);
       if (S.player.speed > S.speedLimit) {
-        return "fail: Du körde för fort! (" + kmh + " km/h)";
+        return `fail: Du körde för fort! (${Math.round(S.player.speed*10)} km/h)`;
       }
       if (S.player.y < 50) return "success";
       return null;
@@ -275,9 +278,8 @@ let levels = [
     title: "Fotgängare",
     intro: "Stanna för fotgängare vid övergångsställe.",
     setup: () => {
-      S.player = new Car(380, 540, "blue");
-      S.sign = null;
-      S.npcs.push(new Car(360, 200, "green", true, 0)); // gående som står still
+      S.player = new Car(380, 500, "blue");
+      S.npcs.push(new Car(360, 200, "green", true, 0));
     },
     update: () => {},
     check: () => {
@@ -294,14 +296,12 @@ let levels = [
     title: "Trafiksignal röd",
     intro: "Stanna vid rödljus.",
     setup: () => {
-      S.player = new Car(380, 540, "blue");
+      S.player = new Car(380, 500, "blue");
       S.sign = { x: 350, y: 250, type: "redlight", lineY: 300 };
     },
     update: () => {},
     check: () => {
-      if (S.player.y < S.sign.lineY) {
-        return "fail: Du körde mot rött!";
-      }
+      if (S.player.y < S.sign.lineY) return "fail: Du körde mot rött!";
       if (S.player.y < 50) return "success";
       return null;
     }
@@ -311,7 +311,7 @@ let levels = [
     title: "Trafiksignal grön",
     intro: "Kör när det är grönt.",
     setup: () => {
-      S.player = new Car(380, 540, "blue");
+      S.player = new Car(380, 500, "blue");
     },
     update: () => {},
     check: () => {
@@ -322,12 +322,12 @@ let levels = [
   {
     id: 8,
     title: "Slutprov",
-    intro: "Blanda regler – visa att du kan!",
+    intro: "Visa att du kan alla regler!",
     setup: () => {
-      S.player = new Car(380, 540, "blue");
+      S.player = new Car(380, 500, "blue");
       S.sign = { x: 350, y: 200, type: "stop", lineY: 250 };
       S.speedLimit = 4;
-      S.npcs.push(new Car(420, -100, "red", true, 3));
+      S.npcs.push(new Car(420, 100, "red", true, 2));
     },
     update: () => {},
     check: () => {
