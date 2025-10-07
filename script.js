@@ -1,147 +1,189 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+const questionContainer = document.getElementById("questionContainer");
 
-const questionText = document.getElementById("questionText");
-const answersDiv = document.getElementById("answers");
+const player = {
+  x: 50,
+  y: 300,
+  width: 40,
+  height: 40,
+  color: "blue",
+  dx: 0,
+  dy: 0,
+  speed: 3,
+  jumpPower: 12,
+  onPlatform: false
+};
 
 const gravity = 0.5;
+let cameraX = 0;
 
-// === Player ===
-class Player {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.width = 50;
-    this.height = 50;
-    this.color = "blue";
-    this.vx = 0;
-    this.vy = 0;
-    this.speed = 5;
-    this.jumpPower = -13;
-    this.onGround = false;
-    this.currentPlatform = null;
-  }
-  draw() {
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y, this.width, this.height);
-  }
-  update() {
-    this.vy += gravity;
-    this.y += this.vy;
-    this.x += this.vx;
-
-    // Plattformkollision
-    this.onGround = false;
-    for (let p of platforms) {
-      if (this.y + this.height >= p.y &&
-          this.y + this.height <= p.y + p.height &&
-          this.x + this.width > p.x &&
-          this.x < p.x + p.width &&
-          this.vy >= 0) {
-        this.y = p.y - this.height;
-        this.vy = 0;
-        this.onGround = true;
-        if (this.currentPlatform !== p) {
-          this.currentPlatform = p;
-          triggerQuestion();
-        }
-      }
-    }
-  }
+let platforms = [];
+for (let i = 0; i < 20; i++) {
+  platforms.push({
+    x: i * 150,
+    y: 350 - (Math.random() * 100),
+    width: 100,
+    height: 20,
+    answered: false,
+    color: "gray"
+  });
 }
 
-// === Plattformar ===
-let platforms = [
-  {x: 100, y: 400, width: 150, height: 20},
-  {x: 300, y: 300, width: 150, height: 20},
-  {x: 500, y: 200, width: 150, height: 20},
-  {x: 200, y: 100, width: 150, height: 20}
-];
-
-// === Frågor ===
-let questions = [
-  {
-    q: "Vad betyder en röd trafiksignal?",
-    a: ["Stanna", "Kör", "Sänk farten", "Fortsätt försiktigt"],
-    correct: 0
-  },
-  {
-    q: "Vad gäller vid högerregeln?",
-    a: ["Du ska väja för fordon från höger", "Du har alltid företräde", "Du ska köra fortare", "Du ska stanna alltid"],
-    correct: 0
-  },
-  {
-    q: "När får du köra om på höger sida?",
-    a: ["Aldrig", "När vägen är tom", "På motorväg", "När vänsterfilen står stilla"],
-    correct: 3
-  },
-  // Du kan lägga till 100+ frågor här
-];
-
+let keys = {};
 let currentQuestion = null;
-let questionActive = false;
-
-const player = new Player(120, 350);
-const keys = {};
+let answeredCorrect = false;
+let askedIndices = new Set();
 
 document.addEventListener("keydown", e => keys[e.key] = true);
 document.addEventListener("keyup", e => keys[e.key] = false);
 
-function triggerQuestion() {
-  if (!questionActive) {
-    currentQuestion = questions[Math.floor(Math.random() * questions.length)];
-    questionText.textContent = currentQuestion.q;
-    answersDiv.innerHTML = "";
-    currentQuestion.a.forEach((ans, i) => {
-      const btn = document.createElement("button");
-      btn.classList.add("answerBtn");
-      btn.textContent = ans;
-      btn.onclick = () => checkAnswer(i);
-      answersDiv.appendChild(btn);
-    });
-    questionActive = true;
+// 100 trafikfrågor
+let questions = [
+  {
+    q: "Vad gäller i en cirkulationsplats?",
+    a: ["Kör alltid till höger", "Ge företräde åt höger", "Ge företräde åt vänster", "Väjningsplikt mot alla"],
+    correct: 0
+  },
+  {
+    q: "Vad är tillåtet att parkera?",
+    a: ["På höger sida av vägen på en huvudled", "5 meter efter ett övergångsställe", "Strax efter en vägkorsning", "På vägrenen på en motortrafikled"],
+    correct: 0
+  },
+  {
+    q: "Vilken försäkring måste du minst ha på ditt fordon?",
+    a: ["Delkasko försäkring", "Halvförsäkring", "Vagnskadeförsäkring", "Trafikförsäkring"],
+    correct: 3
+  },
+  {
+    q: "När får du göra en omkörning till höger?",
+    a: ["Om bilen framför ska svänga till höger", "Om du ska köra om en moped", "Om fordonet framför är ett långsamtgående fordon (LGF)", "Precis innan en vägkorsning"],
+    correct: 2
+  },
+  {
+    q: "Vilket är det lägsta bötesbeloppet för fortkörning?",
+    a: ["1500 kr", "1800 kr", "2000 kr", "2300 kr"],
+    correct: 0
+  },
+  {
+    q: "Vilken tidsvinst får du om du ökar hastigheten från 80 km/tim till 100 km/tim?",
+    a: ["1,5 min / mil", "3 min / mil", "4,5 min / mil", "6 min / mil"],
+    correct: 0
+  },
+  {
+    q: "Vilket av följande påstående beskriver ett ekonomiskt körsätt?",
+    a: ["Alltid försöka köra långsamt med låg växel", "Köra med monterad takbox för bättre aerodynamik", "Försöka hålla ett varvtal över 3000 varv/minut vid motorvägskörning", "Sträva efter att 'hoppa över' en växel vid uppväxling"],
+    correct: 3
+  },
+  {
+    q: "Vad innebär begreppet bruttovikt?",
+    a: ["Fordonets vikt + last vid körtillfället", "Fordonets vikt - fordonets angivna maxlast", "Tjänstevikt + fordonets angivna maxlast", "Skattevikt + last vid körtillfället"],
+    correct: 0
+  },
+  {
+    q: "Vad är miljövänliga däck?",
+    a: ["Vanliga däck", "Däck med mindre mönsterdjup", "Däck som är tillverkade utan högaromatiska oljor (HA-oljor)", "Däck med högre mönsterdjup"],
+    correct: 2
+  },
+  {
+    q: "Du har kört på ett husdjur. Vad ska du göra?",
+    a: ["Inget speciellt, det klassas som ett litet djur så du behöver inte göra något", "Ring polisen", "Försök kontakta djurets ägare", "Kör vidare utan att stoppa"],
+    correct: 2
+  },
+  {
+    q: "Kan du bli dömd till fängelsestraff om du kör med en promillehalt mellan 0.2 - 1.0 promille?",
+    a: ["Ja", "Nej, endast vid grovt rattfylleri", "Nej, oavsett promillehalt", "Ja, men endast om du orsakar en olycka"],
+    correct: 0
+  },
+  {
+    q: "Du har varit med och bevittnat en olycka och har nu blivit kallad att vittna i domstol. Måste du gå dit?",
+    a: ["Ja", "Nej", "Endast om du känner för det", "Endast om du är säker på vad du såg"],
+    correct: 0
+  },
+  {
+    q: "Vad är det allvarligaste som kan hända om du bryter mot stopplikten?",
+    a: ["Du kan få indraget körkort", "Du kan få höga böter", "Du kan få två års fängelse", "Inget, det är inte straffbart"],
+    correct: 0
+  },
+  {
+    q: "Du kör på en väg där vägarbete pågår. Ska du tänka på något?",
+    a: ["Ja, öka farten för att snabbt åka förbi", "Ja, sänk farten och håll ett säkert avstånd till arbetarna", "Ja, kolla så att arbetarna verkligen jobbar och inte tar onödiga kafferaster", "Nej, inget särskilt"],
+    correct: 1
+  },
+  {
+    q: "Du måste fylla på spolarvätska. Var gör du det?",
+    a: ["A = oljesticka", "B = oljepåfyllning", "C = kylarvätska", "D = spolarvätska"],
+    correct: 3
+  },
+  {
+    q: "Är det olagligt för en fotgängare att gå mot rött?",
+    a: ["Ja", "Nej", "Ja, men endast om det inte finns trafik", "Ja, om det inte finns trafikljus"],
+    correct: 0
+  },
+  {
+    q: "Väg innebär lokaliseringsmärket?",
+    a: ["Akutsjukhus", "Telefon", "Olycksdrabbad väg", "Hotell"],
+    correct: 0
+  },
+  {
+    q: "Vad är miljövänliga däck?",
+    a: ["Vanliga däck", "Däck med mindre mönsterdjup", "Däck som är tillverkade utan högaromatiska oljor (HA-oljor)", "Däck med högre mönsterdjup"],
+    correct: 2
+  },
+  {
+    q: "Du har kört på ett husdjur. Vad ska du göra?",
+    a: ["Inget speciellt, det klassas som ett litet djur så du behöver inte göra något", "Ring polisen", "Försök kontakta djurets ägare", "Kör vidare utan att stoppa"],
+    correct: 2
+  },
+  {
+    q: "Kan du bli dömd till fängelsestraff om du kör med en promillehalt mellan 0.2 - 1.0 promille?",
+    a: ["Ja", "Nej, endast vid grovt rattfylleri", "Nej, oavsett promillehalt", "Ja, men endast om du orsakar en olycka"],
+    correct: 0
+  },
+  {
+    q: "Du har varit med och bevittnat en olycka och har nu blivit kallad att vittna i domstol. Måste du gå dit?",
+    a: ["Ja", "Nej", "Endast om du känner för det", "Endast om du är säker på vad du såg"],
+    correct: 0
+  },
+  {
+    q: "Vad är det allvarligaste som kan hända om du bryter mot stopplikten?",
+    a: ["Du kan få indraget körkort", "Du kan få höga böter", "Du kan få två års fängelse", "Inget, det är inte straffbart"],
+    correct: 0
+  },
+  {
+    q: "Du kör på en väg där vägarbete pågår. Ska du tänka på något?",
+    a: ["Ja, öka farten för att snabbt åka förbi", "Ja, sänk farten och håll ett säkert avstånd till arbetarna", "Ja, kolla så att arbetarna verkligen jobbar och inte tar onödiga kafferaster", "Nej, inget särskilt"],
+    correct: 1
   }
+];
+
+function getRandomQuestion() {
+  if (askedIndices.size >= questions.length) askedIndices.clear();
+  let index;
+  do {
+    index = Math.floor(Math.random() * questions.length);
+  } while (askedIndices.has(index));
+  askedIndices.add(index);
+  return questions[index];
 }
 
-function checkAnswer(index) {
-  if (index === currentQuestion.correct) {
-    // Rätt svar: ta bort knappar
-    answersDiv.innerHTML = "";
-  } else {
-    alert("Fel svar, försök igen!");
-  }
-}
+function showQuestion(qObj) {
+  questionContainer.innerHTML = "";
+  const qEl = document.createElement("div");
+  qEl.textContent = qObj.q;
+  questionContainer.appendChild(qEl);
 
-// === Game Loop ===
-function gameLoop() {
-  // Input
-  if (keys["ArrowLeft"]) player.vx = -player.speed;
-  else if (keys["ArrowRight"]) player.vx = player.speed;
-  else player.vx = 0;
+  qObj.a.forEach((ans, i) => {
+    const btn = document.createElement("button");
+    btn.textContent = ans;
+    btn.onclick = () => {
+      if (i === qObj.correct) {
+        answeredCorrect = true;
+      } else {
+        answeredCorrect = false;
+      }
+    };
+    questionContainer.appendChild(btn);
 
-  if (keys["ArrowUp"] && player.onGround) {
-    player.vy = player.jumpPower;
-  }
-
-  player.update();
-  draw();
-  requestAnimationFrame(gameLoop);
-}
-
-// === Kamera och ritning ===
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Kameraförskjutning
-  let camY = Math.min(0, -player.y + 400);
-
-  // Plattformar
-  for (let p of platforms) {
-    ctx.fillStyle = "#555";
-    ctx.fillRect(p.x, p.y + camY, p.width, p.height);
-  }
-
-  player.draw();
-}
-
-gameLoop();
+::contentReference[oaicite:1]{index=1}
+ 
