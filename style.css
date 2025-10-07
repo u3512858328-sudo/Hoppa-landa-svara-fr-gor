@@ -1,142 +1,67 @@
-// === Globala variabler ===
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(#87CEEB, #cfefff);
+  text-align: center;
+  color: #111;
+}
+h1 { margin: 12px 0; font-size: 20px; }
 
-let player = { x: 400, y: 500, width: 40, height: 40, dy: 0, onGround: false };
-let keys = {};
-let platforms = [];
-let score = 0;
+#gameWrap { width: 800px; margin: 0 auto; position: relative; }
 
-// === Frågor om trafikregler ===
-const questions = [
-  { question: "Vad betyder vägmärket STOPP?", answers: ["Stanna helt", "Sakta ner", "Endast vid trafikljus", "Gäller bara cyklister"], correct: 0 },
-  { question: "Vilken sida av vägen kör man på i Sverige?", answers: ["Höger", "Vänster", "Mitten", "Beror på vägen"], correct: 0 },
-  { question: "Vad ska du göra vid väjningsplikt?", answers: ["Ge företräde till annan trafik", "Köra först", "Bara titta åt vänster", "Tuta"], correct: 0 },
-  { question: "Vilket ljus betyder att du måste stanna?", answers: ["Rött", "Gult", "Grönt", "Blinkande grönt"], correct: 0 },
-  { question: "När får du köra om på höger sida?", answers: ["Endast i tät köer", "Alltid", "Aldrig", "På motorväg vid avfart"], correct: 0 },
-  { question: "Vad betyder skylten '30'?", answers: ["Högsta tillåtna hastighet 30 km/h", "Kör i 30 km/h exakt", "Parkera 30 minuter", "Får bara gälla på kvällen"], correct: 0 },
-  { question: "Vad ska du göra när du ser en skolskylt?", answers: ["Sänka farten och vara extra uppmärksam", "Köra snabbare", "Tuta", "Köra om skolbussen"], correct: 0 },
-  { question: "Vilken färg har varningsskyltar i Sverige?", answers: ["Gul med röd kant", "Blå", "Grön", "Vit"], correct: 0 }
-];
-
-let currentQuestion = null;
-
-// === Händelser ===
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
-
-// === Plattformar ===
-function generatePlatforms() {
-  platforms = [];
-  let y = 550;
-  for (let i = 0; i < 8; i++) {
-    platforms.push({
-      x: Math.random() * 700 + 20,
-      y: y,
-      width: 100,
-      height: 10,
-      answeredCorrectly: false
-    });
-    y -= 70;
-  }
+canvas {
+  display: block;
+  margin: 0 auto;
+  border-radius: 6px;
+  border: 3px solid #333;
+  background: linear-gradient(#87CEEB, #bde0fe);
 }
 
-// === Spel loop ===
-function gameLoop() {
-  update();
-  draw();
-  requestAnimationFrame(gameLoop);
+#hud {
+  display:flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-weight: bold;
+  width: 800px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
-// === Uppdatera ===
-function update() {
-  // Rörelse
-  if (keys["ArrowLeft"]) player.x -= 5;
-  if (keys["ArrowRight"]) player.x += 5;
-
-  // Gravitation
-  player.dy += 0.5;
-  player.y += player.dy;
-
-  // Plattformskollision
-  player.onGround = false;
-  for (let plat of platforms) {
-    if (
-      player.x + player.width > plat.x &&
-      player.x < plat.x + plat.width &&
-      player.y + player.height > plat.y &&
-      player.y + player.height < plat.y + plat.height + player.dy &&
-      player.dy >= 0
-    ) {
-      player.y = plat.y - player.height;
-      player.dy = 0;
-      player.onGround = true;
-      if (!plat.answeredCorrectly) askQuestion(plat);
-    }
-  }
-
-  // Hoppa
-  if (keys[" "] && player.onGround) {
-    player.dy = -10;
-    player.onGround = false;
-  }
-
-  // Gränser
-  if (player.y > canvas.height) {
-    player.x = 400;
-    player.y = 500;
-    player.dy = 0;
-  }
-  if (player.x < 0) player.x = 0;
-  if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+#questionContainer {
+  position: fixed;
+  left: 0; top: 0; right: 0; bottom: 0;
+  display:flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.45);
+  z-index: 10;
 }
 
-// === Rita ===
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Plattformar
-  for (let plat of platforms) {
-    ctx.fillStyle = plat.answeredCorrectly ? "green" : "brown";
-    ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
-  }
-
-  // Spelare
-  ctx.fillStyle = "blue";
-  ctx.fillRect(player.x, player.y, player.width, player.height);
+#questionBox {
+  background: white;
+  padding: 18px;
+  border-radius: 10px;
+  width: 520px;
+  max-width: 90%;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  text-align: left;
 }
 
-// === Frågor ===
-function askQuestion(platform) {
-  if (currentQuestion) return; // fråga redan visad
-  currentQuestion = questions[Math.floor(Math.random() * questions.length)];
+#questionBox p { font-size: 18px; margin: 0 0 12px 0; }
 
-  const container = document.getElementById("questionContainer");
-  container.classList.remove("hidden");
-  document.getElementById("questionText").textContent = currentQuestion.question;
-
-  const buttons = document.querySelectorAll(".answerBtn");
-  buttons.forEach((btn, i) => {
-    btn.textContent = currentQuestion.answers[i];
-    btn.onclick = () => checkAnswer(i, platform);
-  });
+#answers { display:flex; flex-wrap: wrap; gap: 8px; }
+.answerBtn {
+  flex: 1 1 48%;
+  padding: 10px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  cursor: pointer;
+  background: #fafafa;
 }
+.answerBtn:hover { background: #f0f0f0; }
 
-// === Kontrollera svar ===
-function checkAnswer(index, platform) {
-  if (index === currentQuestion.correct) {
-    alert("Rätt svar!");
-    score += 10;
-    platform.answeredCorrectly = true;
-  } else {
-    alert("Fel svar!");
-    score -= 5;
-  }
-  document.getElementById("score").textContent = score;
-  document.getElementById("questionContainer").classList.add("hidden");
-  currentQuestion = null;
-}
+.small { margin-top:10px; padding:6px 10px; font-size:14px; }
 
-// === Starta spelet ===
-generatePlatforms();
-gameLoop();
+.hidden { display: none; }
