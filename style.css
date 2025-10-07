@@ -1,59 +1,142 @@
-body {
-  font-family: Arial, sans-serif;
-  text-align: center;
-  background: #87CEEB; /* himmel */
-  margin: 0;
-  padding: 0;
+// === Globala variabler ===
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+let player = { x: 400, y: 500, width: 40, height: 40, dy: 0, onGround: false };
+let keys = {};
+let platforms = [];
+let score = 0;
+
+// === Frågor om trafikregler ===
+const questions = [
+  { question: "Vad betyder vägmärket STOPP?", answers: ["Stanna helt", "Sakta ner", "Endast vid trafikljus", "Gäller bara cyklister"], correct: 0 },
+  { question: "Vilken sida av vägen kör man på i Sverige?", answers: ["Höger", "Vänster", "Mitten", "Beror på vägen"], correct: 0 },
+  { question: "Vad ska du göra vid väjningsplikt?", answers: ["Ge företräde till annan trafik", "Köra först", "Bara titta åt vänster", "Tuta"], correct: 0 },
+  { question: "Vilket ljus betyder att du måste stanna?", answers: ["Rött", "Gult", "Grönt", "Blinkande grönt"], correct: 0 },
+  { question: "När får du köra om på höger sida?", answers: ["Endast i tät köer", "Alltid", "Aldrig", "På motorväg vid avfart"], correct: 0 },
+  { question: "Vad betyder skylten '30'?", answers: ["Högsta tillåtna hastighet 30 km/h", "Kör i 30 km/h exakt", "Parkera 30 minuter", "Får bara gälla på kvällen"], correct: 0 },
+  { question: "Vad ska du göra när du ser en skolskylt?", answers: ["Sänka farten och vara extra uppmärksam", "Köra snabbare", "Tuta", "Köra om skolbussen"], correct: 0 },
+  { question: "Vilken färg har varningsskyltar i Sverige?", answers: ["Gul med röd kant", "Blå", "Grön", "Vit"], correct: 0 }
+];
+
+let currentQuestion = null;
+
+// === Händelser ===
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+// === Plattformar ===
+function generatePlatforms() {
+  platforms = [];
+  let y = 550;
+  for (let i = 0; i < 8; i++) {
+    platforms.push({
+      x: Math.random() * 700 + 20,
+      y: y,
+      width: 100,
+      height: 10,
+      answeredCorrectly: false
+    });
+    y -= 70;
+  }
 }
 
-h1 {
-  margin: 10px;
+// === Spel loop ===
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
 }
 
-#gameContainer {
-  position: relative;
-  margin: 0 auto;
-  width: 800px;
-  height: 600px;
+// === Uppdatera ===
+function update() {
+  // Rörelse
+  if (keys["ArrowLeft"]) player.x -= 5;
+  if (keys["ArrowRight"]) player.x += 5;
+
+  // Gravitation
+  player.dy += 0.5;
+  player.y += player.dy;
+
+  // Plattformskollision
+  player.onGround = false;
+  for (let plat of platforms) {
+    if (
+      player.x + player.width > plat.x &&
+      player.x < plat.x + plat.width &&
+      player.y + player.height > plat.y &&
+      player.y + player.height < plat.y + plat.height + player.dy &&
+      player.dy >= 0
+    ) {
+      player.y = plat.y - player.height;
+      player.dy = 0;
+      player.onGround = true;
+      if (!plat.answeredCorrectly) askQuestion(plat);
+    }
+  }
+
+  // Hoppa
+  if (keys[" "] && player.onGround) {
+    player.dy = -10;
+    player.onGround = false;
+  }
+
+  // Gränser
+  if (player.y > canvas.height) {
+    player.x = 400;
+    player.y = 500;
+    player.dy = 0;
+  }
+  if (player.x < 0) player.x = 0;
+  if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
 }
 
-canvas {
-  background: linear-gradient(to top, #87CEEB 0%, #bde0fe 100%);
-  display: block;
-  margin: 0 auto;
-  border: 2px solid #333;
+// === Rita ===
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Plattformar
+  for (let plat of platforms) {
+    ctx.fillStyle = plat.answeredCorrectly ? "green" : "brown";
+    ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+  }
+
+  // Spelare
+  ctx.fillStyle = "blue";
+  ctx.fillRect(player.x, player.y, player.width, player.height);
 }
 
-#questionContainer {
-  margin-top: 10px;
+// === Frågor ===
+function askQuestion(platform) {
+  if (currentQuestion) return; // fråga redan visad
+  currentQuestion = questions[Math.floor(Math.random() * questions.length)];
+
+  const container = document.getElementById("questionContainer");
+  container.classList.remove("hidden");
+  document.getElementById("questionText").textContent = currentQuestion.question;
+
+  const buttons = document.querySelectorAll(".answerBtn");
+  buttons.forEach((btn, i) => {
+    btn.textContent = currentQuestion.answers[i];
+    btn.onclick = () => checkAnswer(i, platform);
+  });
 }
 
-.hidden {
-  display: none;
+// === Kontrollera svar ===
+function checkAnswer(index, platform) {
+  if (index === currentQuestion.correct) {
+    alert("Rätt svar!");
+    score += 10;
+    platform.answeredCorrectly = true;
+  } else {
+    alert("Fel svar!");
+    score -= 5;
+  }
+  document.getElementById("score").textContent = score;
+  document.getElementById("questionContainer").classList.add("hidden");
+  currentQuestion = null;
 }
 
-#answers {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-top: 5px;
-}
-
-.answerBtn {
-  margin: 5px;
-  padding: 10px 15px;
-  font-size: 16px;
-  cursor: pointer;
-  border-radius: 8px;
-  border: 1px solid #333;
-  transition: 0.2s;
-}
-
-.answerBtn:hover {
-  background-color: #f0f0f0;
-}
-
-#hud {
-  margin-top: 10px;
-  font-size: 18px;
-}
+// === Starta spelet ===
+generatePlatforms();
+gameLoop();
