@@ -1,103 +1,134 @@
-/* Trafikplattformsspel — oändligt, frågebaserat.
-   Controls: ← → för sida, Space för hopp.
-   Landar du på en plattform så kommer en trafikfråga.
-   Rätt svar -> plattform blir grön (får poäng) och reverteras senare.
+/* Sidscrollande plattformsspel med trafikfrågor.
+   Kamera följer spelaren åt höger.
+   Landar du på plattform -> frågeomodal.
+   Rätt svar -> plattform lyser grön, fel -> röd.
+   Plattform återgår till neutral efter timeout så du kan träna oändligt.
+   Frågebank genereras för hundratals frågor (varianter).
 */
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-const scoreEl = document.getElementById("score");
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+
+const scoreDOM = document.getElementById("score");
 const qContainer = document.getElementById("questionContainer");
 const qText = document.getElementById("questionText");
 const answerBtns = Array.from(document.querySelectorAll(".answerBtn"));
 const closeQ = document.getElementById("closeQuestion");
 
-const WIDTH = canvas.width;
-const HEIGHT = canvas.height;
-
-// spelare (världskordinater)
-let player = { x: WIDTH/2 - 20, y: HEIGHT - 100, w: 40, h: 40, dy: 0, speed: 4, jump: -11, onGround: false };
-let cameraY = 0; // world y som motsvarar canvas top
 let keys = {};
-let platforms = [];
+window.addEventListener("keydown", (e) => { if (!e.repeat) keys[e.key] = true; });
+window.addEventListener("keyup", (e) => { keys[e.key] = false; });
+
+// --- Spelare & värld ---
+let player = { x: 120, y: HEIGHT - 160, w: 40, h: 48, dy: 0, vx: 0, speed: 3.4, jump: -10.5, onGround: false };
+let cameraX = 0; // world x corresponding to canvas left
+let gravity = 0.6;
+
+let platforms = []; // plattformobjekt {x,y,w,h,state,revertAt}
 let score = 0;
 
 let questionActive = false;
 let activePlatform = null;
 
-// frågor (utökade och varierade)
-const questions = [
-  { q: "Vad betyder en stoppskylt?", a: ["Stanna helt vid linjen", "Sakta ner", "Fortsätt om ingen bil kommer", "Bara vid gatukorsningar"], correct: 0 },
-  { q: "Vilken sida kör man på i Sverige?", a: ["Höger", "Vänster", "Mitten", "Beroende på väg"], correct: 0 },
-  { q: "Vad gäller i en oskyltad korsning?", a: ["Högerregeln", "Väjningsplikt", "Stopplikt", "Gäller ingen regel"], correct: 0 },
-  { q: "Vad innebär väjningspliktsskylt?", a: ["Ge företräde till annan trafik", "Stanna alltid", "Sakta till 10 km/h", "Parkera bara där"], correct: 0 },
-  { q: "Vad betyder siffran på hastighetsskylten (t.ex. 30)?", a: ["Max tillåten hastighet i km/h", "Minsta hastighet", "Rekommenderad hast.", "Tid i minuter"], correct: 0 },
-  { q: "Vilket ljus betyder stopp?", a: ["Rött", "Gult", "Grönt", "Blinkande grönt"], correct: 0 },
-  { q: "Vad gör du vid ett övergångsställe?", a: ["Stannar om någon går över", "Håller hastigheten", "Tutar", "Kör omgående"], correct: 0 },
-  { q: "Vad bör du göra vid skolområde?", a: ["Sänka farten och vara uppmärksam", "Öka farten", "Tuta vid barn", "Ignorera skylten"], correct: 0 },
-  { q: "När måste du blinka?", a: ["När du svänger eller byter körfält", "Aldrig", "Endast på motorväg", "Endast vid parkering"], correct: 0 },
-  { q: "Vem har företräde vid stopplikt?", a: ["De som ej har stopplikt", "Den som kommer sist", "Vänstertrafiken", "Cyklar alltid"], correct: 0 },
-  { q: "Vad är trafikfarligt vid regn?", a: ["Halka och längre bromssträcka", "Allt bättre grepp", "Ingen skillnad", "Bara för cyklar"], correct: 0 },
-  { q: "När får du köra om på höger sida?", a: ["Sällan — i vissa köer kan det tillåtas", "Alltid", "Aldrig", "Endast i rondell"], correct: 0 }
+// --- Frågebank ---
+// Basfrågor - vi skapar varianter för att nå hundratals
+const baseQuestions = [
+  { q: "Vad betyder STOPP-skylten?", a: ["Stanna helt vid linjen", "Sakta ner", "Fortsätt om det är fritt", "Parkera här"], correct: 0 },
+  { q: "Vilken sida kör man på i Sverige?", a: ["Höger", "Vänster", "Mitten", "Ingen särskild"], correct: 0 },
+  { q: "Vad innebär väjningsplikt?", a: ["Ge företräde åt annan trafik", "Stanna alltid", "Köra först", "Tuta"], correct: 0 },
+  { q: "Vilket ljus betyder stopp?", a: ["Rött", "Gult", "Grönt", "Blinkande blått"], correct: 0 },
+  { q: "Vad betyder skylten med '30'?", a: ["Max 30 km/h", "Min 30 km/h", "Köra i 30 m", "Du får parkera 30 min"], correct: 0 },
+  { q: "Vad gör du vid ett övergångsställe där någon gått ut på vägen?", a: ["Stannar och släpper över personen", "Fortsätter långsamt", "Tutar", "Kör runt personen"], correct: 0 },
+  { q: "När måste du använda blinkers?", a: ["När du svänger eller byter körfält", "Aldrig", "Endast på kvällstid", "Endast i rondell"], correct: 0 },
+  { q: "Vad är viktigt när det regnar?", a: ["Minska hastigheten pga längre bromssträcka", "Köra snabbare", "Köra som vanligt", "Öka avståndet till kantstenen"], correct: 0 },
+  { q: "Vad betyder en vägmärke med cyklist?", a: ["Cykelpassage/upplysning om cykeltrafik", "Förbud för cyklar", "Parkeringsinformation", "Busshållplats"], correct: 0 },
+  { q: "Vad betyder en gul varningsskylt?", a: ["Varning för farlig situation", "Parkering åsidosatt", "P-tillstånd", "Fritidsområde"], correct: 0 }
 ];
 
-// --- init ---
-function init() {
-  generateInitialPlatforms();
-  bindEvents();
-  updateHUD();
-  gameLoop();
-}
-
-// skapar initiala plattformar - uppradat i världen (y minskar uppåt)
-function generateInitialPlatforms() {
-  platforms = [];
-  let startY = 500;
-  for (let i = 0; i < 10; i++) {
-    platforms.push(makePlatform(randBetween(60, WIDTH-160), startY, randBetween(80, 140)));
-    startY -= randBetween(60, 110);
+// Generera större frågebank genom att göra varianter
+let questions = [];
+function generateQuestionBank(target = 300) {
+  questions = [];
+  // Lägg till baseQuestions oförändrade
+  for (const b of baseQuestions) questions.push(JSON.parse(JSON.stringify(b)));
+  // Skapa varianter genom att lägga till små förändringar i texten
+  let i = 0;
+  while (questions.length < target) {
+    const base = baseQuestions[i % baseQuestions.length];
+    const clone = JSON.parse(JSON.stringify(base));
+    // lägg till enklare variation i frågetext för att skapa "nya" frågor
+    clone.q = base.q + " (variant " + (Math.floor(questions.length / baseQuestions.length) + 1) + ")";
+    // rotera svaren slumpmässigt men håll reda på rätt index
+    const indices = shuffle([0,1,2,3]);
+    const answers = indices.map(idx => base.a[idx]);
+    const correct = indices.indexOf(base.correct);
+    clone.a = answers;
+    clone.correct = correct;
+    questions.push(clone);
+    i++;
   }
-  // markplattform längst ner (säker start)
-  platforms.push(makePlatform(WIDTH/2 - 120, 580, 250));
+}
+generateQuestionBank(400); // skapa ~400 frågor
+
+// shuffle helper
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i=a.length-1;i>0;i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
-// plattformsfabrik
-function makePlatform(x, y, w) {
-  return {
-    x, y, w,
-    h: 12,
-    state: "neutral", // neutral | correct | wrong
-    revertAt: 0 // timestamp för återställning
-  };
+// --- Plattformsgenerator ---
+// layout: plattformar sprids horisontellt, kameran rullar åt höger. Vi genererar vid behov.
+function initPlatforms() {
+  platforms = [];
+  // startplattformer nära början
+  platforms.push(makePlatform(50, HEIGHT - 80, 220)); // startyta
+  let x = 300;
+  for (let i=0;i<12;i++) {
+    const w = randBetween(100, 180);
+    const y = HEIGHT - randBetween(120, 300);
+    platforms.push(makePlatform(x, y, w));
+    x += randBetween(180, 320);
+  }
 }
-
+function makePlatform(x,y,w) {
+  return { x, y, w, h: 14, state: "neutral", revertAt: 0 };
+}
 function randBetween(a,b){ return Math.floor(Math.random()*(b-a))+a; }
 
-// bind keys och answer-knappar
-function bindEvents() {
-  window.addEventListener("keydown", (e) => { if (!e.repeat) keys[e.key] = true; });
-  window.addEventListener("keyup", (e) => { keys[e.key] = false; });
+// --- Init ---
+initPlatforms();
+updateScoreDOM();
+bindQuestionButtons();
+requestAnimationFrame(loop);
 
-  answerBtns.forEach(btn => btn.addEventListener("click", () => {
-    const idx = parseInt(btn.dataset.index,10);
-    handleAnswer(idx);
-  }));
-  closeQ.addEventListener("click", () => hideQuestion());
+// --- Eventer för frågeknapparna ---
+function bindQuestionButtons() {
+  answerBtns.forEach((btn, idx) => {
+    btn.addEventListener("click", () => handleAnswer(idx));
+  });
+  closeQ.addEventListener("click", hideQuestion);
 }
 
-// huvudloop
-function gameLoop() {
+// --- Huvudloop ---
+function loop() {
   update();
   draw();
-  requestAnimationFrame(gameLoop);
+  requestAnimationFrame(loop);
 }
 
-// uppdatering — fysik, kamerahantering, plattformslogik
+// --- Uppdatering: fysik, kamera, plattformsgenerering, revert osv ---
 function update() {
-  // spelarrörelse
-  if (keys["ArrowLeft"]) player.x -= player.speed;
-  if (keys["ArrowRight"]) player.x += player.speed;
+  // horisontell rörelse
+  if (keys["ArrowLeft"]) player.vx = -player.speed;
+  else if (keys["ArrowRight"]) player.vx = player.speed;
+  else player.vx = 0;
 
   // hoppa
   if (keys[" "] && player.onGround && !questionActive) {
@@ -105,135 +136,128 @@ function update() {
     player.onGround = false;
   }
 
-  // grav
-  player.dy += 0.5;
+  // physics
+  player.dy += gravity;
+  player.x += player.vx;
   player.y += player.dy;
 
-  // koll till plattformar (endast när faller)
+  // collision: plattformlandning (när vi faller och spod)
   player.onGround = false;
-  for (let plat of platforms) {
-    // enkel AABB-landing: spelaren kommer ovanifrån och landar på plattformens y
-    if (player.x + player.w > plat.x && player.x < plat.x + plat.w) {
-      // check vertical collision: tidigare under kanten -> now on top
-      if (player.y + player.h > plat.y && player.y + player.h - player.dy <= plat.y && player.dy >= 0) {
-        // placera ovanpå
-        player.y = plat.y - player.h;
+  for (const p of platforms) {
+    // horizontal overlap
+    if (player.x + player.w > p.x && player.x < p.x + p.w) {
+      // vertical: land från ovan
+      if (player.y + player.h > p.y && player.y + player.h - player.dy <= p.y && player.dy >= 0) {
+        player.y = p.y - player.h;
         player.dy = 0;
         player.onGround = true;
-
-        // trigger fråga om plattform neutral och ingen fråga aktiv
-        if (!questionActive && plat.state === "neutral") {
-          askQuestionForPlatform(plat);
-        }
+        // trigger question om neutral och ingen aktiv fråga
+        if (!questionActive && p.state === "neutral") askQuestionForPlatform(p);
       }
     }
   }
 
-  // kamera följer spelare uppåt (minska cameraY när spelarens y går över mitt)
-  const screenTopWorld = cameraY;
-  const screenMidWorld = cameraY + HEIGHT * 0.45;
-  if (player.y < screenMidWorld) {
-    cameraY -= (screenMidWorld - player.y) * 0.12; // mjuk följning
+  // kamera följer spelaren - låt kameran ha en vänlig offset så spelaren inte är i mitten
+  const followX = player.x - WIDTH * 0.35;
+  if (followX > cameraX) cameraX += (followX - cameraX) * 0.12; // mjuk följning
+
+  // generera fler plattformar om kameran närmar sig slutet
+  const furthestX = Math.max(...platforms.map(p => p.x + p.w));
+  while (furthestX < cameraX + WIDTH*2) {
+    const lastX = furthestX + randBetween(120, 300);
+    const w = randBetween(90, 170);
+    const y = HEIGHT - randBetween(100, 320);
+    platforms.push(makePlatform(lastX, y, w));
+    // safety break
+    if (platforms.length > 1200) break;
+    // update furthestX
+    const arr = platforms.map(p => p.x + p.w);
+    // assign new value
+    // eslint-disable-next-line no-unused-vars
+    var _ = arr; // just to avoid lint
+    // compute again
+    // (cheaper to recompute in while loop head)
+    break; // one at a time to maintain spacing predictability
   }
 
-  // generera nya plattformar överst om behövs
-  const highestY = Math.min(...platforms.map(p => p.y));
-  while (highestY > cameraY - 300) {
-    // skapa ovanför
-    const newY = highestY - randBetween(60, 140);
-    platforms.push(makePlatform(randBetween(40, WIDTH-140), newY, randBetween(80, 140)));
-    // recalc highestY
-    if (platforms.length > 500) break;
-    // recompute highestY for next loop
-    highestY = Math.min(...platforms.map(p => p.y));
-  }
+  // radera plattformar som är långt till vänster utanför view
+  platforms = platforms.filter(p => p.x + p.w > cameraX - WIDTH);
 
-  // ta bort plattformar som är långt under view
-  platforms = platforms.filter(p => p.y < cameraY + HEIGHT + 400);
-
-  // återställ plattformar efter timeout
+  // återställ plattformar vid timeout
   const now = Date.now();
-  for (let p of platforms) {
+  for (const p of platforms) {
     if ((p.state === "correct" || p.state === "wrong") && p.revertAt && now > p.revertAt) {
       p.state = "neutral";
       p.revertAt = 0;
     }
   }
 
-  // begränsa spelare i sidled
-  if (player.x < 0) player.x = 0;
-  if (player.x + player.w > WIDTH) player.x = WIDTH - player.w;
-
-  // om spelaren faller långt under skärmen -> teleportera upp till en säker plattform
-  if (player.y > cameraY + HEIGHT + 200) {
-    // hitta genast en plattform nära botten av view och placera spelaren ovanför den
-    const candidate = platforms.reduce((lowest, p) => (!lowest || p.y > lowest.y) ? p : lowest, null);
-    if (candidate) {
-      player.x = candidate.x + 10;
-      player.y = candidate.y - player.h - 2;
+  // begränsningar
+  if (player.y > HEIGHT + 600) {
+    // om faller långt -> teleportera till en plattform nära kamerans vänsterkant
+    const safe = platforms.find(p => p.x > cameraX && p.x < cameraX + WIDTH*0.8);
+    if (safe) {
+      player.x = safe.x + 10;
+      player.y = safe.y - player.h - 2;
       player.dy = 0;
-      cameraY = candidate.y - HEIGHT/2;
     } else {
-      // fallback
-      player.x = WIDTH/2;
-      player.y = cameraY + HEIGHT - 150;
+      player.x = cameraX + 120;
+      player.y = HEIGHT - 160;
       player.dy = 0;
     }
   }
+  // sidbegränsning: ej nödvändigt, världen scrollar men vi förhindra att spelaren går för långt bakåt
+  if (player.x < cameraX + 10) player.x = cameraX + 10;
 }
 
-// --- Rita hela världen (kameratransform) ---
+// --- Rita med kameratransform (vänster = cameraX) ---
 function draw() {
   ctx.clearRect(0,0,WIDTH,HEIGHT);
 
-  // bakgrund: himmel + lite "djup" grund
-  // (ingen world-transformation; vi ritar med offset)
-  const offsetY = cameraY;
-
-  // rita "mark" gradient
+  // bakgrund
   ctx.fillStyle = "#cfe9c7";
-  ctx.fillRect(0, HEIGHT - 80 + (offsetY % 20), WIDTH, 80);
+  ctx.fillRect(0, HEIGHT - 80, WIDTH, 80);
 
-  // plattformar
-  for (let plat of platforms) {
-    const screenX = plat.x;
-    const screenY = plat.y - offsetY;
-    // platform synlighet check
-    if (screenY > -100 && screenY < HEIGHT + 100) {
-      if (plat.state === "neutral") ctx.fillStyle = "#7a4f2a";
-      else if (plat.state === "correct") ctx.fillStyle = "#2ecc40";
-      else if (plat.state === "wrong") ctx.fillStyle = "#e74c3c";
-      roundedRect(ctx, screenX, screenY, plat.w, plat.h, 6, true, false);
-      // eventuellt rita question-ikon
-      if (plat.state === "neutral") {
-        ctx.fillStyle = "rgba(255,255,255,0.06)";
-        ctx.fillRect(screenX, screenY - 12, 28, 6);
-      }
+  // draw platforms
+  for (const p of platforms) {
+    const sx = Math.round(p.x - cameraX);
+    const sy = Math.round(p.y);
+    // synlighet
+    if (sx + p.w < -100 || sx > WIDTH + 100) continue;
+    if (p.state === "neutral") ctx.fillStyle = "#7a4f2a";
+    else if (p.state === "correct") ctx.fillStyle = "#2ecc40";
+    else ctx.fillStyle = "#e74c3c";
+    roundedRect(ctx, sx, sy, p.w, p.h, 6, true, false);
+
+    // optionally draw a small marker indicating question availability
+    if (p.state === "neutral") {
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fillRect(sx + Math.min(10, p.w-20), sy - 10, 28, 6);
     }
   }
 
-  // spelare
-  const playerScreenY = player.y - offsetY;
+  // draw player
+  const px = Math.round(player.x - cameraX);
+  const py = Math.round(player.y);
   ctx.fillStyle = "#0b66c3";
-  roundedRect(ctx, player.x, playerScreenY, player.w, player.h, 8, true, false);
-  // öga/markör
-  ctx.fillStyle = "white";
-  ctx.fillRect(player.x + player.w/2 - 6, playerScreenY + 10, 12, 8);
+  roundedRect(ctx, px, py, player.w, player.h, 8, true, false);
+  // eye marker
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(px + player.w/2 - 6, py + 10, 12, 8);
 
-  // HUD-ruta (fixed)
-  ctx.fillStyle = "rgba(0,0,0,0.15)";
-  ctx.fillRect(6,6,220,36);
+  // HUD (top-left screen-fixed)
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillRect(8,8,220,34);
   ctx.fillStyle = "#fff";
   ctx.font = "16px Arial";
-  ctx.fillText(`Poäng: ${score}`, 14, 30);
-  ctx.fillStyle = "#fff";
+  ctx.fillText(`Poäng: ${score}`, 16, 32);
   ctx.font = "12px Arial";
-  ctx.fillText("← → = rörelse  ·  Space = hoppa", 270, 26);
+  ctx.fillText("← → = rörelse  ·  Space = hoppa", 260, 26);
 }
 
-// helper för rundade rektanglar
-function roundedRect(ctx, x, y, w, h, r, fill, stroke) {
-  if (r === undefined) r = 5;
+// rounded rect helper
+function roundedRect(ctx,x,y,w,h,r, fill, stroke) {
+  if (r === undefined) r = 6;
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -246,41 +270,35 @@ function roundedRect(ctx, x, y, w, h, r, fill, stroke) {
 }
 
 // --- Frågehantering ---
-function askQuestionForPlatform(platform) {
+// När spelaren landar på en neutral plattform: askQuestionForPlatform(p)
+function askQuestionForPlatform(p) {
   questionActive = true;
-  activePlatform = platform;
+  activePlatform = p;
 
-  // välj slumpad fråga
+  // pick random question
   const qObj = questions[Math.floor(Math.random() * questions.length)];
 
-  // mixa svarens ordning och behåll index för rätt svar
-  const originalAnswers = qObj.a.slice();
-  const order = shuffleArray([0,1,2,3]);
-  const answersShuffled = order.map(i => originalAnswers[i]);
-  const correctIndexShuffled = order.indexOf(qObj.correct);
+  // shuffle answers and determine new correct index
+  const order = shuffle([0,1,2,3]);
+  const answersShuffled = order.map(i => qObj.a[i]);
+  const correctIndex = order.indexOf(qObj.correct);
 
-  // visa modal
+  // fill modal
   qText.textContent = qObj.q;
   answerBtns.forEach((btn, idx) => {
     btn.textContent = answersShuffled[idx];
-    btn.dataset.index = idx;
-    btn.dataset.correct = (idx === correctIndexShuffled) ? "1" : "0";
+    btn.dataset.correct = (idx === correctIndex) ? "1" : "0";
+    btn.disabled = false;
+    btn.style.opacity = "1";
   });
+
+  // show
   qContainer.classList.remove("hidden");
+  qContainer.setAttribute("aria-hidden","false");
   closeQ.classList.add("hidden");
 }
 
-// shuffle helper
-function shuffleArray(arr) {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-// svarshantering
+// handleAnswer called by button handlers
 function handleAnswer(idx) {
   if (!questionActive || !activePlatform) return;
   const btn = answerBtns[idx];
@@ -292,28 +310,44 @@ function handleAnswer(idx) {
     score = Math.max(0, score - 5);
     activePlatform.state = "wrong";
   }
-  // planera återställning efter t.ex. 10 sek
-  activePlatform.revertAt = Date.now() + 10000;
-  updateHUD();
+  activePlatform.revertAt = Date.now() + 9000; // revertera efter 9s
+  updateScoreDOM();
   hideQuestion();
 }
 
-// göm modal
+// hide modal
 function hideQuestion() {
   questionActive = false;
   activePlatform = null;
   qContainer.classList.add("hidden");
+  qContainer.setAttribute("aria-hidden","true");
 }
 
-// HUD updater
-function updateHUD() {
-  scoreEl.textContent = `Poäng: ${score}`;
+// update DOM scoreboard (in addition to canvas)
+function updateScoreDOM() {
+  scoreDOM.textContent = `Poäng: ${score}`;
 }
 
-// uppdatera score DOM när score ändras
-const scoreObserver = new MutationObserver(() => {});
-// starta
-init();
+// --- utility shuffle reused above (local copy) ---
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i=a.length-1;i>0;i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
-// uppdatera score DOM regelbundet (eftersom vi ritar score i canvas också)
-setInterval(updateHUD, 250);
+// wire up answer button events to numeric index mapping
+answerBtns.forEach((b, idx) => b.addEventListener("click", () => {
+  // find which button index in the visible set:
+  handleAnswer(idx);
+}));
+
+closeQ.addEventListener("click", hideQuestion);
+
+// start score display update loop
+setInterval(updateScoreDOM, 300);
+
+// finished init message (console)
+console.log("Trafikplattformsspel sidscroll — initialiserat.");
