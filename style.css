@@ -9,20 +9,16 @@ h1 {
 }
 
 #hud {
-  margin: 10px auto;
+  margin: 10px;
   padding: 10px;
   background: #fff;
   border: 1px solid #333;
   display: inline-block;
   min-width: 400px;
-  font-weight: bold;
-  font-size: 16px;
 }
 
 canvas {
   display: block;
   margin: 20px auto;
-  background: #87CEEB; /* Himmel */
-  border: 2px solid #333;
-  border-radius: 8px;
+  background: #87CEEB; /* himmel runt vägen */
 }
