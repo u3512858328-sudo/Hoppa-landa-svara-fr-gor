@@ -1,54 +1,21 @@
 body {
   font-family: Arial, sans-serif;
-  background: #e0e0e0;
   text-align: center;
-  margin: 0;
+  background: #e0e0e0;
   overflow: hidden;
 }
 
-h1 {
-  margin-top: 10px;
-}
-
-#gameContainer {
-  position: relative;
-  width: 800px;
-  margin: 0 auto;
-}
-
 canvas {
-  background: #87CEEB;
   display: block;
-  border: 2px solid #333;
+  margin: 20px auto;
+  background: #87CEEB;
 }
 
 #questionContainer {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: rgba(255,255,255,0.9);
-  padding: 10px;
-  border-radius: 5px;
-  min-width: 400px;
+  margin: 10px;
+  font-size: 18px;
 }
-
-.answerBtn {
-  display: block;
-  margin: 5px 0;
-  padding: 5px;
-  background: #ccc;
-  border: none;
-  cursor: pointer;
-  width: 100%;
-  border-radius: 3px;
-}
-
-.answerBtn:hover {
-  background: #aaa;
-}
-
-.platform {
-  position: absolute;
-  background: #555;
-  border: 1px solid #333;
+button {
+  margin: 5px;
+  padding: 5px 10px;
 }
