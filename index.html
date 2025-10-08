@@ -1,14 +1,42 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-  <meta charset="UTF-8">
-  <title>Plattformsspel med trafikfrågor</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Trafikplattform — träna trafikregler</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Hoppa på plattformar och träna trafikregler</h1>
-  <canvas id="gameCanvas" width="800" height="400"></canvas>
-  <div id="questionContainer"></div>
+  <div id="ui">
+    <h1>Trafikplattform</h1>
+    <div id="meta">
+      <div id="score">Poäng: 0</div>
+      <div id="controls">← → = rörelse · Mellanslag = hoppa</div>
+    </div>
+
+    <div id="startOverlay" class="overlay">
+      <div class="startBox">
+        <h2>Hoppa och träna trafikregler</h2>
+        <p>Landar du på en plattform får du en fråga. Svara rätt → plattformen blir grön.</p>
+        <button id="startBtn" class="big">Starta spelet</button>
+        <p class="muted">Spelet startar automatiskt om du väntar 4 sekunder.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameWrap">
+    <canvas id="gameCanvas" width="1000" height="560"></canvas>
+  </div>
+
+  <!-- Frågeruta -->
+  <div id="questionModal" class="modal hidden">
+    <div class="modalBox">
+      <p id="qText"></p>
+      <div id="qAnswers"></div>
+      <div id="qFeedback" class="hidden"></div>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>
