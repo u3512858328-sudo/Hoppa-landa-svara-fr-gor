@@ -12,7 +12,7 @@ const qFeedback = document.getElementById("qFeedback");
 
 // Canvas resolution
 const CW = canvas.width = 1000;
-const CH = canvas.height = 560;
+const CH = canvas.height = 570;
 
 // ----------- Settings -------------
 let running = false;
